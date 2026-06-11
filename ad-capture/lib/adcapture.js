@@ -170,16 +170,32 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
     }
 
     tick('กำลังหาปุ่มเล่นวิดีโอ...');
-    for (const sel of PLAY_BUTTON_SELECTORS) {
-      const btn = await page.$(sel);
-      if (btn) {
-        try { await btn.click({ timeout: 2000 }); } catch (_) {}
-        break;
+
+    // โฆษณาวิดีโอมักเล่นทันทีและจบเร็ว ต้องแคปภายใน CAPTURE_DEADLINE_MS หลังเปิดลิงก์
+    // กดปุ่ม Play / สั่ง play() ผ่าน JS ซ้ำๆ จนกว่าวิดีโอจะเริ่มเล่นหรือหมดเวลา
+    // เพราะ player ของ YouTube มักยังไม่ render ตอน domcontentloaded
+    while (Date.now() - pageOpenedAt < CAPTURE_DEADLINE_MS) {
+      for (const sel of PLAY_BUTTON_SELECTORS) {
+        const btn = await page.$(sel);
+        if (btn) {
+          try { await btn.click({ timeout: 500 }); } catch (_) {}
+        }
       }
+
+      const playing = await page.evaluate(() => {
+        let any = false;
+        document.querySelectorAll('video').forEach((v) => {
+          v.muted = true;
+          if (v.paused) v.play().catch(() => {});
+          if (!v.paused && v.currentTime > 0 && !v.ended) any = true;
+        });
+        return any;
+      }).catch(() => false);
+
+      if (playing) break;
+      await page.waitForTimeout(300);
     }
 
-    // โฆษณาวิดีโอมักเล่นทันทีและจบเร็ว ต้องแคปภายใน CAPTURE_DEADLINE_MS
-    // หลังเปิดลิงก์ ไม่งั้นจะพลาดโฆษณาแล้วเจอแต่หน้าคอนเทนต์ปกติ
     const remaining = CAPTURE_DEADLINE_MS - (Date.now() - pageOpenedAt);
     if (remaining > 0) {
       tick(`รอให้โฆษณาเล่น... (เหลือ ${Math.round(remaining / 1000)}s)`);
