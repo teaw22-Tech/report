@@ -43,16 +43,24 @@ function readAdsFromExcel(filePath) {
 }
 
 // เช็คว่ามีวิดีโอกำลังเล่นอยู่ในหน้าไหม (รวมถึงใน iframe)
+// ใส่ timeout กันเฟรมที่ค้าง/ตอบสนองช้าทำให้ loop ทั้งหมดหยุด
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(false), ms)),
+  ]);
+}
+
 async function isVideoPlaying(page) {
   const check = async (frame) => {
     try {
-      return await frame.evaluate(() => {
+      return await withTimeout(frame.evaluate(() => {
         const videos = document.querySelectorAll('video');
         for (const v of videos) {
           if (!v.paused && v.currentTime > 0 && !v.ended) return true;
         }
         return false;
-      });
+      }), 2000);
     } catch (_) {
       return false;
     }
