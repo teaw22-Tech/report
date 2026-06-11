@@ -68,7 +68,9 @@ const FALLBACK_WAIT_MS = 6000;
 const POLL_INTERVAL_MS = 1000;
 const EXTRA_WAIT_AFTER_PLAY_MS = 2000;
 
-async function captureOne(browser, ad, index, shotsDir, controller) {
+async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
+  const tick = (step) => { if (onTick) onTick(step); };
+
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
@@ -80,9 +82,11 @@ async function captureOne(browser, ad, index, shotsDir, controller) {
   const filePath = path.join(shotsDir, fileName);
 
   try {
+    tick('กำลังเปิดหน้าเว็บ...');
     await page.goto(ad.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(2000);
 
+    tick('กำลังหาปุ่มเล่นวิดีโอ...');
     for (const sel of PLAY_BUTTON_SELECTORS) {
       const btn = await page.$(sel);
       if (btn) {
@@ -95,17 +99,21 @@ async function captureOne(browser, ad, index, shotsDir, controller) {
     let playing = false;
     let waited = 0;
     while (waited < MAX_WAIT_FOR_VIDEO_MS) {
+      tick(`กำลังตรวจสอบว่าโฆษณาเล่นหรือยัง... (${Math.round(waited / 1000)}s)`);
       if (await isVideoPlaying(page)) { playing = true; break; }
       await page.waitForTimeout(POLL_INTERVAL_MS);
       waited += POLL_INTERVAL_MS;
     }
 
     if (playing) {
+      tick('โฆษณาเริ่มเล่นแล้ว กำลังรอให้นิ่ง...');
       await page.waitForTimeout(EXTRA_WAIT_AFTER_PLAY_MS);
     } else {
+      tick('ไม่พบวิดีโอ กำลังรอเพิ่มเติม...');
       await page.waitForTimeout(FALLBACK_WAIT_MS);
     }
 
+    tick('กำลังแคปภาพหน้าจอ...');
     await page.screenshot({ path: filePath, timeout: 90000 });
     await page.close();
     return { ...ad, screenshot: filePath, status: 'ok' };
@@ -130,7 +138,9 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
 
     const ad = ads[i];
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'running' });
-    const result = await captureOne(browser, ad, i, shotsDir, controller);
+    const result = await captureOne(browser, ad, i, shotsDir, controller, (step) => {
+      if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'tick', step });
+    });
     results.push(result);
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error });
   }

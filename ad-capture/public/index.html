@@ -19,6 +19,10 @@
   button:disabled{opacity:.5;cursor:not-allowed}
   .btn-cancel{background:transparent;border:1px solid var(--red);color:var(--red);display:none}
   .log{margin-top:1.25rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:12px;max-height:240px;overflow-y:auto;display:none;white-space:pre-wrap;line-height:1.6}
+  .status-line{display:none;margin-top:8px;font-size:12px;color:var(--accent);font-family:monospace}
+  .status-line.show{display:flex;align-items:center;gap:6px}
+  .spinner{width:10px;height:10px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
   .progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px;display:none}
   .progress-fill{height:100%;background:var(--accent);width:0%;transition:width .2s}
   .download{display:none;margin-top:1rem;text-align:center;padding:10px;background:rgba(29,158,117,.12);border:1px solid var(--accent);border-radius:8px;color:var(--accent);text-decoration:none;font-weight:600;font-size:13px}
@@ -40,6 +44,7 @@
   <button type="button" id="cancelBtn" class="btn-cancel">⏹ ยกเลิกการทำงาน</button>
 
   <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="status-line" id="statusLine"></div>
   <div class="log" id="log"></div>
   <a class="download" id="download" href="#">⬇️ ดาวน์โหลดไฟล์ PowerPoint</a>
 </div>
@@ -52,7 +57,19 @@ const logEl = document.getElementById('log');
 const progressBar = document.getElementById('progressBar');
 const progressFill = document.getElementById('progressFill');
 const downloadEl = document.getElementById('download');
+const statusLine = document.getElementById('statusLine');
 let currentJobId = null;
+
+function setStatus(text){
+  if (!text) {
+    statusLine.classList.remove('show');
+    statusLine.innerHTML = '';
+    return;
+  }
+  statusLine.classList.add('show');
+  statusLine.innerHTML = '<div class="spinner"></div><span></span>';
+  statusLine.querySelector('span').textContent = text;
+}
 
 function appendLog(text, isErr){
   logEl.style.display = 'block';
@@ -69,6 +86,7 @@ function stopUI(){
   cancelBtn.disabled = false;
   cancelBtn.textContent = '⏹ ยกเลิกการทำงาน';
   currentJobId = null;
+  setStatus(null);
 }
 
 form.addEventListener('submit', async (e) => {
@@ -97,9 +115,13 @@ form.addEventListener('submit', async (e) => {
       } else if (ev.type === 'progress') {
         if (ev.status === 'running') {
           appendLog(`(${ev.index+1}/${ev.total}) กำลังแคป: ${ev.name}`);
+          setStatus('กำลังเริ่มต้น...');
+        } else if (ev.status === 'tick') {
+          setStatus(`(${ev.index+1}/${ev.total}) ${ev.name}: ${ev.step}`);
         } else {
           appendLog(`  -> ${ev.status === 'ok' ? 'สำเร็จ' : 'ผิดพลาด: ' + ev.error}`, ev.status !== 'ok');
           progressFill.style.width = Math.round(((ev.index+1)/ev.total)*100) + '%';
+          setStatus(null);
         }
       } else if (ev.type === 'done') {
         appendLog('เสร็จสิ้น! กดปุ่มด้านล่างเพื่อดาวน์โหลด');
