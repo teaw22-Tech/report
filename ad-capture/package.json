@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "cli": "node capture.js",
-    "setup": "playwright install chromium"
+    "setup": "playwright install chromium",
+    "login": "node login-session.js"
   },
   "keywords": [],
   "author": "",
@@ -16,9 +17,7 @@
     "multer": "^2.1.1",
     "open": "^11.0.0",
     "playwright": "^1.60.0",
-    "playwright-extra": "^4.3.6",
     "pptxgenjs": "^4.0.1",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "xlsx": "^0.18.5"
   }
 }

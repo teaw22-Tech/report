@@ -3,9 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
 const pptxgen = require('pptxgenjs');
-const { chromium } = require('playwright-extra');
-const stealth = require('puppeteer-extra-plugin-stealth')();
-chromium.use(stealth);
+const { chromium } = require('playwright');
 
 const PLAY_BUTTON_SELECTORS = [
   '.ytp-large-play-button',
@@ -66,6 +64,33 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+// คล้าย withTimeout แต่ throw error ออกมาแทนที่จะคืนค่า false (ใช้กับขั้นตอนที่ห้ามค้าง)
+function withTimeoutOrThrow(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
+const LAUNCH_TIMEOUT_MS = 30000;
+
+// โหลด session ที่ login ไว้แล้ว (ถ้ามี) จาก env var BROWSER_STORAGE_STATE_B64
+// สร้างได้ด้วย `node login-session.js` แล้วแปลงไฟล์ storageState.json เป็น base64
+function loadStorageState() {
+  const b64 = process.env.BROWSER_STORAGE_STATE_B64;
+  if (!b64) return null;
+
+  try {
+    const json = Buffer.from(b64, 'base64').toString('utf-8');
+    const filePath = path.join(require('os').tmpdir(), 'storageState.json');
+    fs.writeFileSync(filePath, json);
+    return filePath;
+  } catch (err) {
+    console.error('โหลด BROWSER_STORAGE_STATE_B64 ไม่สำเร็จ:', err.message);
+    return null;
+  }
+}
+
 async function isVideoPlaying(page) {
   const check = async (frame) => {
     try {
@@ -93,28 +118,34 @@ const EXTRA_WAIT_AFTER_PLAY_MS = 2000;
 
 const PER_AD_TIMEOUT_MS = 60000;
 
-async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
+async function captureOne(browser, ad, index, shotsDir, controller, onTick, storageStatePath) {
   const tick = (step) => { if (onTick) onTick(step); };
-
-  const page = await browser.newPage({
-    viewport: { width: 1024, height: 576 },
-    ignoreHTTPSErrors: true,
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    locale: 'th-TH',
-    timezoneId: 'Asia/Bangkok',
-  });
-
-  // ลด signal ที่ทำให้ YouTube ตรวจจับว่าเป็น headless browser แล้วขึ้น "Sign in to confirm you're not a bot"
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-  });
-
-  if (controller) controller.currentPage = page;
 
   const fileName = `${String(index + 1).padStart(3, '0')}_${ad.type}.jpg`.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = path.join(shotsDir, fileName);
 
+  let context;
+  let page;
+
   const run = async () => {
+    tick('กำลังเปิดเบราว์เซอร์...');
+    context = await browser.newContext({
+      viewport: { width: 1024, height: 576 },
+      ignoreHTTPSErrors: true,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      locale: 'th-TH',
+      timezoneId: 'Asia/Bangkok',
+      storageState: storageStatePath || undefined,
+    });
+    page = await context.newPage();
+
+    // ลด signal ที่ทำให้ YouTube ตรวจจับว่าเป็น headless browser แล้วขึ้น "Sign in to confirm you're not a bot"
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+
+    if (controller) controller.currentPage = page;
+
     tick('กำลังเปิดหน้าเว็บ...');
     await page.goto(ad.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(2000);
@@ -163,10 +194,10 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
       run(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('รายการนี้ใช้เวลานานเกินไป (timeout)')), PER_AD_TIMEOUT_MS)),
     ]);
-    await page.close();
+    await context.close();
     return { ...ad, screenshot: filePath, status: 'ok' };
   } catch (err) {
-    await page.close().catch(() => {});
+    if (context) await context.close().catch(() => {});
     return { ...ad, screenshot: null, status: 'error', error: err.message };
   }
 }
@@ -200,6 +231,9 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
   }
 
+  // session ที่ login ไว้แล้ว (เช่น YouTube/WeTV) เก็บเป็น base64 ของไฟล์ storageState.json
+  const storageStatePath = loadStorageState();
+
   const results = [];
   for (let i = 0; i < ads.length; i++) {
     if (controller && controller.cancelled) break;
@@ -208,11 +242,16 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'running' });
 
     // เปิด/ปิด browser ใหม่ทุกรายการ เพื่อไม่ให้ memory สะสมจากรายการก่อนหน้า
-    const browser = await chromium.launch(launchOptions);
-    const result = await captureOne(browser, ad, i, shotsDir, controller, (step) => {
-      if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'tick', step });
-    });
-    await browser.close().catch(() => {});
+    let result;
+    try {
+      const browser = await withTimeoutOrThrow(chromium.launch(launchOptions), LAUNCH_TIMEOUT_MS, 'เปิดเบราว์เซอร์ไม่สำเร็จ (timeout)');
+      result = await captureOne(browser, ad, i, shotsDir, controller, (step) => {
+        if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'tick', step });
+      }, storageStatePath);
+      await browser.close().catch(() => {});
+    } catch (err) {
+      result = { ...ad, screenshot: null, status: 'error', error: err.message };
+    }
 
     results.push(result);
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error });
