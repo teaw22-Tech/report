@@ -1,0 +1,17 @@
+{
+  "name": "Ads Capture - Login Session Setup",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/desktop-lite:1": {
+      "password": "vscode"
+    }
+  },
+  "forwardPorts": [6080],
+  "portsAttributes": {
+    "6080": {
+      "label": "Desktop (เปิดที่นี่เพื่อ login)",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "cd ad-capture && npm install && npx playwright install --with-deps chromium"
+}

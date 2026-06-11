@@ -73,13 +73,43 @@ Variable บน Render:
 ## ลิงก์ที่ต้อง login (YouTube/WeTV ขึ้น "Sign in" / "Please login")
 
 ถ้าลิงก์ไหนต้อง login เข้าบัญชีก่อนถึงจะดูได้ ระบบสามารถ "แอบอ้าง" session
-ที่ login ไว้แล้วได้ โดยทำตามขั้นตอนนี้ (ทำครั้งเดียว ทำบนเครื่องตัวเอง):
+ที่ login ไว้แล้วได้ โดยทำตามขั้นตอนนี้ (ทำครั้งเดียว)
+
+### วิธีที่ 1: ทำบนเครื่องที่มี Node.js
 
 1. ติดตั้ง Node.js + รัน `npm install` และ `npm run setup` ในโฟลเดอร์ `ad-capture` (ครั้งแรกครั้งเดียว)
 2. รันคำสั่ง `npm run login` — จะมีหน้าต่างเบราว์เซอร์เปิดขึ้นมา
 3. Login เข้าบัญชีที่ต้องการ (เช่น Google/YouTube, WeTV) ในหน้าต่างนั้นให้ครบ
 4. กลับมาที่ terminal แล้วกด Enter — ระบบจะสร้างไฟล์ `storageState.b64.txt`
 5. เปิดไฟล์นั้น คัดลอกข้อความทั้งหมด
+
+### วิธีที่ 2: ทำผ่าน GitHub Codespaces (ไม่ต้องติดตั้งอะไรในเครื่อง — ใช้ browser ล้วนๆ)
+
+ใช้ตอนที่เครื่องที่มีถูกบล็อกไม่ให้ติดตั้ง/รันโปรแกรม
+
+1. เปิด `https://github.com/teaw22-tech/report` (ต้อง login GitHub ก่อน)
+2. กดปุ่มสีเขียว **Code** → แท็บ **Codespaces** → **Create codespace on main**
+3. รอ 2-5 นาที ให้ Codespace เตรียมตัวเอง (ติดตั้ง Node.js + Playwright ให้อัตโนมัติ)
+   เมื่อพร้อม จะเปิดเป็นหน้า VS Code ใน browser
+4. ไปที่แท็บ **PORTS** ด้านล่าง (อยู่แถวเดียวกับ Terminal) — จะเห็น port `6080`
+   พร้อมป้ายชื่อ "เปิดที่นี่เพื่อ login" → คลิกไอคอนลูกโลก (Open in Browser)
+   จะเปิดแท็บใหม่เป็นหน้าจอ Desktop (noVNC) — ถ้าถามรหัสผ่าน ให้ใส่ `vscode`
+5. กลับไปที่แท็บ VS Code → เปิด **Terminal** (เมนู Terminal → New Terminal)
+   แล้วพิมพ์:
+   ```
+   cd ad-capture
+   npm run login
+   ```
+6. สลับไปที่แท็บ Desktop (noVNC) จากข้อ 4 — จะเห็นหน้าต่างเบราว์เซอร์ Chromium เปิดขึ้นมา
+   → Login เข้าบัญชี Google/YouTube และ WeTV ให้เรียบร้อยในหน้าต่างนี้
+7. กลับไปที่แท็บ Terminal (VS Code) → กด **Enter** ตามที่ขึ้นข้อความ
+   → จะได้ไฟล์ `storageState.b64.txt` ในโฟลเดอร์ `ad-capture`
+8. คลิกขวาที่ไฟล์ `storageState.b64.txt` ใน sidebar ซ้าย → **Download**
+   เปิดไฟล์ที่ดาวน์โหลดมา → คัดลอกข้อความทั้งหมด
+9. ปิด Codespace ได้เลย (ไม่จำเป็นต้องเก็บไว้)
+
+### นำ session ไปใช้บน Render (ทำต่อจากวิธีไหนก็ได้)
+
 6. ไปที่ Render → service `ads-capture` → แท็บ **Environment** →
    เพิ่มตัวแปรชื่อ `BROWSER_STORAGE_STATE_B64` แล้ววางค่าที่คัดลอกมา → Save
    (Render จะ redeploy ให้อัตโนมัติ)
