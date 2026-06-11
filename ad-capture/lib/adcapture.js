@@ -76,6 +76,8 @@ const FALLBACK_WAIT_MS = 6000;
 const POLL_INTERVAL_MS = 1000;
 const EXTRA_WAIT_AFTER_PLAY_MS = 2000;
 
+const PER_AD_TIMEOUT_MS = 60000;
+
 async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
   const tick = (step) => { if (onTick) onTick(step); };
 
@@ -89,7 +91,7 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
   const fileName = `${String(index + 1).padStart(3, '0')}_${ad.type}.png`.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = path.join(shotsDir, fileName);
 
-  try {
+  const run = async () => {
     tick('กำลังเปิดหน้าเว็บ...');
     await page.goto(ad.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(2000);
@@ -122,11 +124,18 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
     }
 
     tick('กำลังแคปภาพหน้าจอ...');
-    await page.screenshot({ path: filePath, timeout: 90000 });
+    await page.screenshot({ path: filePath, timeout: 25000 });
+  };
+
+  try {
+    await Promise.race([
+      run(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('รายการนี้ใช้เวลานานเกินไป (timeout)')), PER_AD_TIMEOUT_MS)),
+    ]);
     await page.close();
     return { ...ad, screenshot: filePath, status: 'ok' };
   } catch (err) {
-    await page.close();
+    await page.close().catch(() => {});
     return { ...ad, screenshot: null, status: 'error', error: err.message };
   }
 }
@@ -134,7 +143,7 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
 async function runCapture(ads, shotsDir, onProgress, controller) {
   fs.mkdirSync(shotsDir, { recursive: true });
 
-  const launchOptions = { args: ['--no-sandbox'] };
+  const launchOptions = { args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
   }
