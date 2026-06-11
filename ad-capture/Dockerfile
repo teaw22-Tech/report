@@ -9,6 +9,7 @@ RUN npm install --omit=dev \
 COPY . .
 
 ENV PORT=3000
+ENV NODE_OPTIONS="--max-old-space-size=192 --expose-gc"
 EXPOSE 3000
 
 CMD ["node", "server.js"]

@@ -88,7 +88,7 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
 
   if (controller) controller.currentPage = page;
 
-  const fileName = `${String(index + 1).padStart(3, '0')}_${ad.type}.png`.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileName = `${String(index + 1).padStart(3, '0')}_${ad.type}.jpg`.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = path.join(shotsDir, fileName);
 
   const run = async () => {
@@ -124,7 +124,7 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
     }
 
     tick('กำลังแคปภาพหน้าจอ...');
-    await page.screenshot({ path: filePath, timeout: 25000 });
+    await page.screenshot({ path: filePath, type: 'jpeg', quality: 70, timeout: 25000 });
   };
 
   try {
@@ -148,9 +148,20 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
       '--no-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--disable-software-rasterizer',
       '--single-process',
+      '--no-zygote',
       '--disable-extensions',
-      '--js-flags=--max-old-space-size=256',
+      '--disable-background-networking',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--disable-translate',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--js-flags=--max-old-space-size=192',
     ],
   };
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
@@ -173,6 +184,9 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
 
     results.push(result);
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error });
+
+    // คืนหน่วยความจำให้ node ก่อนเริ่มรายการถัดไป (ต้องรันด้วย --expose-gc)
+    if (global.gc) global.gc();
   }
 
   return results;
