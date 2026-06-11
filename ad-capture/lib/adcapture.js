@@ -65,7 +65,7 @@ async function captureOne(browser, ad, index, shotsDir, waitSeconds) {
 
     await page.waitForTimeout(waitSeconds * 1000);
 
-    await page.screenshot({ path: filePath });
+    await page.screenshot({ path: filePath, timeout: 90000 });
     await page.close();
     return { ...ad, screenshot: filePath, status: 'ok' };
   } catch (err) {
