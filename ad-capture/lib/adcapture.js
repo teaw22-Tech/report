@@ -15,6 +15,16 @@ const PLAY_BUTTON_SELECTORS = [
   '[class*="playBtn"]',
 ];
 
+// ปุ่มยอมรับ cookie/popup ที่มักบังหน้าจอก่อนแคปภาพ
+const COOKIE_CONSENT_SELECTORS = [
+  'button[aria-label*="Accept"]',
+  'button[aria-label*="ยอมรับ"]',
+  '#onetrust-accept-btn-handler',
+  '.onetrust-close-btn-handler',
+  '[class*="cookie"] button',
+  '[class*="consent"] button',
+];
+
 function readAdsFromExcel(filePath) {
   const wb = xlsx.readFile(filePath);
   const ads = [];
@@ -95,6 +105,14 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
     tick('กำลังเปิดหน้าเว็บ...');
     await page.goto(ad.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(2000);
+
+    tick('กำลังปิด popup/cookie...');
+    for (const sel of COOKIE_CONSENT_SELECTORS) {
+      try {
+        const btn = await page.$(sel);
+        if (btn) await btn.click({ timeout: 1500 });
+      } catch (_) {}
+    }
 
     tick('กำลังหาปุ่มเล่นวิดีโอ...');
     for (const sel of PLAY_BUTTON_SELECTORS) {
