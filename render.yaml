@@ -3,6 +3,7 @@ services:
     name: ads-capture
     runtime: docker
     plan: free
+    region: singapore
     rootDir: ad-capture
     envVars:
       - key: PORT
