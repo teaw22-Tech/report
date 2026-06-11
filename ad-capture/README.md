@@ -151,6 +151,24 @@ Variable บน Render:
 - ถ้าโฆษณาไม่ขึ้น (เช่น ติด frequency cap/geo targeting หรือ session ที่ login
   ไม่มีสิทธิ์เข้าถึงแคมเปญนั้น) ระบบจะแคปภาพหน้าคอนเทนต์ปกติแทน
 
+## โฆษณาไม่ขึ้นเพราะ geo targeting (server อยู่ต่างประเทศ)
+
+Render free tier อยู่ที่ Singapore — ถ้าแคมเปญยิงเฉพาะประเทศไทย Google
+อาจไม่ serve โฆษณาให้ IP สิงคโปร์ วิธีแก้คือให้เบราว์เซอร์วิ่งผ่าน proxy
+ที่มี IP ประเทศไทย:
+
+1. สมัครบริการ proxy ที่มี IP ไทย (แนะนำแบบ residential เช่น Webshare,
+   IPRoyal, Bright Data ฯลฯ — มักมีแพ็กเกจเล็กราคาไม่แพง) แล้วเอาค่า
+   host:port + username/password มา
+2. ไปที่ Render → service `ads-capture` → **Environment** → เพิ่มตัวแปร:
+   - `PROXY_SERVER` เช่น `http://proxy.example.com:8080`
+   - `PROXY_USERNAME` / `PROXY_PASSWORD` (ถ้า proxy ต้องยืนยันตัวตน)
+3. Save → รอ redeploy แล้วทดสอบใหม่
+
+วิธีเช็คว่าติด geo จริงไหม: เปิดลิงก์เดียวกันใน Chrome ของ GitHub Codespace
+(ผ่านหน้าจอ noVNC ซึ่งเป็น IP ต่างประเทศเหมือนกัน) — ถ้าใน Codespace ก็ไม่เห็น
+โฆษณาเหมือนกัน แสดงว่าติด geo ให้ตั้ง proxy ตามด้านบน
+
 ## เกี่ยวกับ Render free tier (512MB RAM)
 
 ระบบถูกปรับให้ประหยัดหน่วยความจำที่สุดสำหรับ free tier แล้ว:

@@ -14,3 +14,9 @@ services:
         sync: false
       - key: BROWSER_STORAGE_STATE_B64
         sync: false
+      - key: PROXY_SERVER
+        sync: false
+      - key: PROXY_USERNAME
+        sync: false
+      - key: PROXY_PASSWORD
+        sync: false

@@ -279,6 +279,18 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
     // ตัด flag --enable-automation ที่บอกเว็บว่าเป็นบอท
     ignoreDefaultArgs: ['--enable-automation'],
   };
+
+  // โฆษณามักยิง geo targeting ตาม IP — ถ้า server อยู่ต่างประเทศ (เช่น Render
+  // อยู่ Singapore) ให้วิ่งผ่าน proxy ที่มี IP ประเทศเป้าหมายแทน
+  // ตั้งค่าผ่าน env: PROXY_SERVER (เช่น http://1.2.3.4:8080) และถ้า proxy
+  // ต้องยืนยันตัวตน ใส่ PROXY_USERNAME / PROXY_PASSWORD ด้วย
+  if (process.env.PROXY_SERVER) {
+    launchOptions.proxy = {
+      server: process.env.PROXY_SERVER,
+      username: process.env.PROXY_USERNAME || undefined,
+      password: process.env.PROXY_PASSWORD || undefined,
+    };
+  }
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
   }
