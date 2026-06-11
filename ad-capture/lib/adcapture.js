@@ -91,6 +91,25 @@ function loadStorageState() {
   }
 }
 
+// ข้อความที่มักขึ้นเมื่อหน้าเว็บต้อง login ก่อนถึงจะดูโฆษณาได้
+const LOGIN_WALL_PATTERNS = [
+  /sign in to confirm/i,
+  /ลงชื่อเข้าใช้เพื่อยืนยัน/,
+  /please (create or )?login/i,
+  /กรุณาเข้าสู่ระบบ/,
+  /create or login/i,
+];
+
+async function detectLoginWall(page) {
+  try {
+    const text = await withTimeout(page.evaluate(() => document.body.innerText.slice(0, 3000)), 2000);
+    if (!text) return false;
+    return LOGIN_WALL_PATTERNS.some((re) => re.test(text));
+  } catch (_) {
+    return false;
+  }
+}
+
 async function isVideoPlaying(page) {
   const check = async (frame) => {
     try {
@@ -187,7 +206,11 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
 
     tick('กำลังแคปภาพหน้าจอ...');
     await page.screenshot({ path: filePath, type: 'jpeg', quality: 70, timeout: 25000 });
+
+    loginWall = await detectLoginWall(page);
   };
+
+  let loginWall = false;
 
   try {
     await Promise.race([
@@ -195,7 +218,13 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
       new Promise((_, reject) => setTimeout(() => reject(new Error('รายการนี้ใช้เวลานานเกินไป (timeout)')), PER_AD_TIMEOUT_MS)),
     ]);
     await context.close();
-    return { ...ad, screenshot: filePath, status: 'ok' };
+    const result = { ...ad, screenshot: filePath, status: 'ok' };
+    if (loginWall) {
+      result.warning = storageStatePath
+        ? 'ลิงก์นี้ต้อง login — session ปัจจุบันอาจหมดอายุหรือไม่ครอบคลุมเว็บนี้ (ดู README: npm run login)'
+        : 'ลิงก์นี้ต้อง login ก่อนถึงจะเห็นโฆษณา — ตั้งค่า login session (ดู README: npm run login)';
+    }
+    return result;
   } catch (err) {
     if (context) await context.close().catch(() => {});
     return { ...ad, screenshot: null, status: 'error', error: err.message };
@@ -254,7 +283,7 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
     }
 
     results.push(result);
-    if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error });
+    if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error, warning: result.warning });
 
     // คืนหน่วยความจำให้ node ก่อนเริ่มรายการถัดไป (ต้องรันด้วย --expose-gc)
     if (global.gc) global.gc();
@@ -290,6 +319,12 @@ async function buildPptx(results, outFile) {
     } else {
       slide.addText(`แคปไม่สำเร็จ: ${r.error || 'ไม่ทราบสาเหตุ'}`, {
         x: 0.6, y: 2.5, w: 9, h: 1, fontSize: 14, color: 'CC0000',
+      });
+    }
+
+    if (r.warning) {
+      slide.addText(`⚠ ${r.warning}`, {
+        x: 0.4, y: 6.2, w: 12.5, h: 0.35, fontSize: 11, color: 'CC8800',
       });
     }
 

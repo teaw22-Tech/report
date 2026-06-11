@@ -120,6 +120,7 @@ form.addEventListener('submit', async (e) => {
           setStatus(`(${ev.index+1}/${ev.total}) ${ev.name}: ${ev.step}`);
         } else {
           appendLog(`  -> ${ev.status === 'ok' ? 'สำเร็จ' : 'ผิดพลาด: ' + ev.error}`, ev.status !== 'ok');
+          if (ev.warning) appendLog(`  ⚠ ${ev.warning}`, true);
           progressFill.style.width = Math.round(((ev.index+1)/ev.total)*100) + '%';
           setStatus(null);
         }
