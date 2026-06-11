@@ -3,7 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
 const pptxgen = require('pptxgenjs');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-extra');
+const stealth = require('puppeteer-extra-plugin-stealth')();
+chromium.use(stealth);
 
 const PLAY_BUTTON_SELECTORS = [
   '.ytp-large-play-button',
