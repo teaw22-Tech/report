@@ -155,6 +155,8 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
     // ลด signal ที่ทำให้ YouTube ตรวจจับว่าเป็น headless browser แล้วขึ้น "Sign in to confirm you're not a bot"
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US', 'en'] });
+      if (!window.chrome) window.chrome = { runtime: {} };
     });
 
     if (controller) controller.currentPage = page;
@@ -271,6 +273,11 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
       '--mute-audio',
       '--js-flags=--max-old-space-size=192',
     ],
+    // ถ้ามีจอ (เช่น Xvfb ใน Docker) ให้รันแบบ headed —
+    // Google ตรวจจับ headless ได้และจะไม่ serve โฆษณา
+    headless: !process.env.DISPLAY,
+    // ตัด flag --enable-automation ที่บอกเว็บว่าเป็นบอท
+    ignoreDefaultArgs: ['--enable-automation'],
   };
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
