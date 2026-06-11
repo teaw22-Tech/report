@@ -124,8 +124,10 @@ async function detectLoginWall(page) {
   }
 }
 
-// โฆษณาวิดีโอมักเล่นทันทีตอนเปิดหน้าและอาจจบเร็ว ต้องแคปภายในเวลานี้หลังเปิดลิงก์
-const CAPTURE_DEADLINE_MS = 5000;
+// โฆษณา preroll จบเร็ว — เมื่อวิดีโอเริ่มเล่นแล้ว ต้องแคปภายในเวลานี้นับจากเริ่มเล่น
+const CAPTURE_AFTER_PLAY_MS = 3000;
+// เวลารวมสูงสุดที่พยายามกดให้วิดีโอเริ่มเล่น (headless มักบล็อก autoplay)
+const START_PLAYBACK_TIMEOUT_MS = 15000;
 
 const PER_AD_TIMEOUT_MS = 60000;
 
@@ -169,37 +171,53 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
       } catch (_) {}
     }
 
-    tick('กำลังหาปุ่มเล่นวิดีโอ...');
+    tick('กำลังสั่งเล่นวิดีโอ...');
 
-    // โฆษณาวิดีโอมักเล่นทันทีและจบเร็ว ต้องแคปภายใน CAPTURE_DEADLINE_MS หลังเปิดลิงก์
-    // กดปุ่ม Play / สั่ง play() ผ่าน JS ซ้ำๆ จนกว่าวิดีโอจะเริ่มเล่นหรือหมดเวลา
-    // เพราะ player ของ YouTube มักยังไม่ render ตอน domcontentloaded
-    while (Date.now() - pageOpenedAt < CAPTURE_DEADLINE_MS) {
+    // headless Chromium บล็อก autoplay และคลิกเดียวมักไม่ติด — ลองหลายวิธีวนซ้ำ
+    // จนกว่าวิดีโอจะเริ่มเล่นจริง (currentTime ขยับ) หรือหมดเวลา
+    const isPlaying = () => page.evaluate(() => {
+      let any = false;
+      document.querySelectorAll('video').forEach((v) => {
+        v.muted = true;
+        if (v.paused) v.play().catch(() => {});
+        if (!v.paused && v.currentTime > 0 && !v.ended) any = true;
+      });
+      return any;
+    }).catch(() => false);
+
+    let playing = false;
+    while (Date.now() - pageOpenedAt < START_PLAYBACK_TIMEOUT_MS) {
+      // 1) ปุ่ม Play ตาม selector ที่รู้จัก
       for (const sel of PLAY_BUTTON_SELECTORS) {
         const btn = await page.$(sel);
         if (btn) {
           try { await btn.click({ timeout: 500 }); } catch (_) {}
         }
       }
+      if (await isPlaying()) { playing = true; break; }
 
-      const playing = await page.evaluate(() => {
-        let any = false;
-        document.querySelectorAll('video').forEach((v) => {
-          v.muted = true;
-          if (v.paused) v.play().catch(() => {});
-          if (!v.paused && v.currentTime > 0 && !v.ended) any = true;
-        });
-        return any;
-      }).catch(() => false);
+      // 2) คลิกกลางตัว player โดยตรง (YouTube toggle play ด้วยการคลิกวิดีโอ)
+      try {
+        const video = await page.$('#movie_player video, video');
+        if (video) await video.click({ timeout: 500, force: true });
+      } catch (_) {}
+      if (await isPlaying()) { playing = true; break; }
 
-      if (playing) break;
-      await page.waitForTimeout(300);
+      // 3) คีย์ลัด k ของ YouTube (เล่น/หยุด)
+      try {
+        await page.keyboard.press('k');
+      } catch (_) {}
+      if (await isPlaying()) { playing = true; break; }
+
+      await page.waitForTimeout(400);
     }
 
-    const remaining = CAPTURE_DEADLINE_MS - (Date.now() - pageOpenedAt);
-    if (remaining > 0) {
-      tick(`รอให้โฆษณาเล่น... (เหลือ ${Math.round(remaining / 1000)}s)`);
-      await page.waitForTimeout(remaining);
+    if (playing) {
+      // โฆษณา preroll เพิ่งเริ่ม — แคปภายในช่วง 5 วินาทีแรกของโฆษณา
+      tick('โฆษณาเริ่มเล่นแล้ว กำลังรอจังหวะแคป...');
+      await page.waitForTimeout(CAPTURE_AFTER_PLAY_MS);
+    } else {
+      tick('วิดีโอไม่เริ่มเล่น — แคปภาพสภาพปัจจุบันแทน');
     }
 
     tick('กำลังแคปภาพหน้าจอ...');
