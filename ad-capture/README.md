@@ -1,4 +1,4 @@
-# Ads Capture → PowerPoint
+# Ads Capture DV360 → PowerPoint
 
 ระบบแคปภาพโฆษณาจากลิงก์ (DV360 / YouTube / OTT ต่างๆ) อัตโนมัติ แล้วรวมเป็นไฟล์
 PowerPoint — ใช้งานผ่านหน้าเว็บ ไม่ต้องเขียนโค้ด
