@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: ads-capture
+    runtime: docker
+    plan: free
+    rootDir: ad-capture
+    envVars:
+      - key: PORT
+        value: 3000
