@@ -23,6 +23,9 @@ const COOKIE_CONSENT_SELECTORS = [
   '.onetrust-close-btn-handler',
   '[class*="cookie"] button',
   '[class*="consent"] button',
+  'text=Accept',
+  'text=ยอมรับ',
+  'text=Got it',
 ];
 
 function readAdsFromExcel(filePath) {
