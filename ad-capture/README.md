@@ -110,21 +110,32 @@ Variable บน Render:
    → Login เข้าบัญชี Google/YouTube และ WeTV ให้เรียบร้อยในหน้าต่างนี้
 7. กลับไปที่แท็บ Terminal (VS Code) → กด **Enter** ตามที่ขึ้นข้อความ
    → จะได้ไฟล์ `storageState.b64.txt` ในโฟลเดอร์ `ad-capture`
-8. คลิกขวาที่ไฟล์ `storageState.b64.txt` ใน sidebar ซ้าย → **Download**
-   เปิดไฟล์ที่ดาวน์โหลดมา → คัดลอกข้อความทั้งหมด
-9. ปิด Codespace ได้เลย (ไม่จำเป็นต้องเก็บไว้)
+8. ปิด Codespace ได้เลย (ไม่จำเป็นต้องเก็บไว้)
 
 ### นำ session ไปใช้บน Render (ทำต่อจากวิธีไหนก็ได้)
 
-6. ไปที่ Render → service `ads-capture` → แท็บ **Environment** →
+**วิธีที่แนะนำ: Secret File** (ไฟล์ `storageState.json` มักมีขนาดใหญ่
+วางเป็นค่า Environment Variable อาจถูกตัด/ไม่ครบทำให้ใช้งานไม่ได้)
+
+1. ในโฟลเดอร์ `ad-capture` ของ Codespace → คลิกขวาไฟล์ **`storageState.json`**
+   (ไม่ใช่ .b64.txt) → **Download**
+2. ไปที่ Render → service `ads-capture` → แท็บ **Environment** → เลื่อนลงไปหา
+   ส่วน **Secret Files** → กด **Add file**
+3. ช่อง filename ใส่ `storageState.json` → อัปโหลด/วางเนื้อหาไฟล์ที่ดาวน์โหลดมา
+   → **Save Changes** (Render จะ redeploy ให้อัตโนมัติ)
+
+**วิธีสำรอง: Environment Variable** (ถ้า Secret File ใช้ไม่ได้)
+
+1. คลิกขวาไฟล์ `storageState.b64.txt` ใน sidebar ซ้าย → **Download**
+   เปิดไฟล์ที่ดาวน์โหลดมา → คัดลอกข้อความทั้งหมด (ระวังอย่าให้ตัด/ขาดบางส่วน)
+2. ไปที่ Render → service `ads-capture` → แท็บ **Environment** →
    เพิ่มตัวแปรชื่อ `BROWSER_STORAGE_STATE_B64` แล้ววางค่าที่คัดลอกมา → Save
-   (Render จะ redeploy ให้อัตโนมัติ)
 
 จากนั้นทุกลิงก์ที่ระบบเปิด จะ "เห็น" เหมือนผู้ใช้ที่ login บัญชีนั้นอยู่แล้ว
 
 ⚠️ **ข้อควรระวัง**: ค่านี้เทียบเท่ารหัสผ่าน ห้ามแชร์/commit ขึ้น git เด็ดขาด
-เก็บไว้ใน Render Environment Variable เท่านั้น ถ้า session หมดอายุ (เช่น
-ผ่านไปหลายเดือน) ให้ทำซ้ำขั้นตอนข้างบนเพื่ออัปเดตค่าใหม่
+เก็บไว้ใน Render Environment Variable / Secret File เท่านั้น ถ้า session
+หมดอายุ (เช่น ผ่านไปหลายเดือน) ให้ทำซ้ำขั้นตอนข้างบนเพื่ออัปเดตค่าใหม่
 
 (วิธีนี้ปลอดภัยกว่าการเก็บ email/password ไว้ในระบบโดยตรง เพราะ Google/WeTV
 มักบล็อกการ login อัตโนมัติด้วย email/password และอาจมี 2FA ที่ทำอัตโนมัติไม่ได้)

@@ -74,19 +74,33 @@ function withTimeoutOrThrow(promise, ms, message) {
 
 const LAUNCH_TIMEOUT_MS = 30000;
 
-// โหลด session ที่ login ไว้แล้ว (ถ้ามี) จาก env var BROWSER_STORAGE_STATE_B64
-// สร้างได้ด้วย `node login-session.js` แล้วแปลงไฟล์ storageState.json เป็น base64
+// โหลด session ที่ login ไว้แล้ว (ถ้ามี)
+// วิธีที่ 1 (แนะนำ): อัปโหลด storageState.json เป็น Render Secret File
+//   จะอ่านได้จาก /etc/secrets/storageState.json โดยตรง (ไม่ต้องแปลงเป็น base64)
+// วิธีที่ 2: env var BROWSER_STORAGE_STATE_B64 (base64 ของไฟล์ storageState.json)
+//   สร้างได้ด้วย `node login-session.js`
 function loadStorageState() {
+  const SECRET_FILE_PATH = '/etc/secrets/storageState.json';
+  if (fs.existsSync(SECRET_FILE_PATH)) {
+    try {
+      JSON.parse(fs.readFileSync(SECRET_FILE_PATH, 'utf-8'));
+      return SECRET_FILE_PATH;
+    } catch (err) {
+      console.error(`อ่าน ${SECRET_FILE_PATH} ไม่สำเร็จ (ไม่ใช่ JSON ที่ถูกต้อง):`, err.message);
+    }
+  }
+
   const b64 = process.env.BROWSER_STORAGE_STATE_B64;
   if (!b64) return null;
 
   try {
     const json = Buffer.from(b64, 'base64').toString('utf-8');
+    JSON.parse(json); // ตรวจสอบว่า decode แล้วได้ JSON ที่ถูกต้องก่อนเขียนไฟล์
     const filePath = path.join(require('os').tmpdir(), 'storageState.json');
     fs.writeFileSync(filePath, json);
     return filePath;
   } catch (err) {
-    console.error('โหลด BROWSER_STORAGE_STATE_B64 ไม่สำเร็จ:', err.message);
+    console.error('โหลด BROWSER_STORAGE_STATE_B64 ไม่สำเร็จ (ค่าที่วางอาจไม่ครบ/ไม่ถูกต้อง):', err.message);
     return null;
   }
 }
