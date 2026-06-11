@@ -82,7 +82,7 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
   const tick = (step) => { if (onTick) onTick(step); };
 
   const page = await browser.newPage({
-    viewport: { width: 1280, height: 720 },
+    viewport: { width: 1024, height: 576 },
     ignoreHTTPSErrors: true,
   });
 
@@ -143,11 +143,19 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
 async function runCapture(ads, shotsDir, onProgress, controller) {
   fs.mkdirSync(shotsDir, { recursive: true });
 
-  const launchOptions = { args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
+  const launchOptions = {
+    args: [
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--single-process',
+      '--disable-extensions',
+      '--js-flags=--max-old-space-size=256',
+    ],
+  };
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
   }
-  const browser = await chromium.launch(launchOptions);
 
   const results = [];
   for (let i = 0; i < ads.length; i++) {
@@ -155,14 +163,18 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
 
     const ad = ads[i];
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'running' });
+
+    // เปิด/ปิด browser ใหม่ทุกรายการ เพื่อไม่ให้ memory สะสมจากรายการก่อนหน้า
+    const browser = await chromium.launch(launchOptions);
     const result = await captureOne(browser, ad, i, shotsDir, controller, (step) => {
       if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'tick', step });
     });
+    await browser.close().catch(() => {});
+
     results.push(result);
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error });
   }
 
-  await browser.close();
   return results;
 }
 
