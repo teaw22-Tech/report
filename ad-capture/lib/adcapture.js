@@ -124,30 +124,8 @@ async function detectLoginWall(page) {
   }
 }
 
-async function isVideoPlaying(page) {
-  const check = async (frame) => {
-    try {
-      return await withTimeout(frame.evaluate(() => {
-        const videos = document.querySelectorAll('video');
-        for (const v of videos) {
-          if (!v.paused && v.currentTime > 0 && !v.ended) return true;
-        }
-        return false;
-      }), 2000);
-    } catch (_) {
-      return false;
-    }
-  };
-  for (const frame of page.frames()) {
-    if (await check(frame)) return true;
-  }
-  return false;
-}
-
-const MAX_WAIT_FOR_VIDEO_MS = 15000;
-const FALLBACK_WAIT_MS = 6000;
-const POLL_INTERVAL_MS = 1000;
-const EXTRA_WAIT_AFTER_PLAY_MS = 2000;
+// โฆษณาวิดีโอมักเล่นทันทีตอนเปิดหน้าและอาจจบเร็ว ต้องแคปภายในเวลานี้หลังเปิดลิงก์
+const CAPTURE_DEADLINE_MS = 5000;
 
 const PER_AD_TIMEOUT_MS = 60000;
 
@@ -180,8 +158,8 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
     if (controller) controller.currentPage = page;
 
     tick('กำลังเปิดหน้าเว็บ...');
+    const pageOpenedAt = Date.now();
     await page.goto(ad.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(2000);
 
     tick('กำลังปิด popup/cookie...');
     for (const sel of COOKIE_CONSENT_SELECTORS) {
@@ -200,22 +178,12 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
       }
     }
 
-    // รอจนวิดีโอเริ่มเล่น (สูงสุด MAX_WAIT_FOR_VIDEO_MS) ถ้าไม่เจอเลยใช้เวลารอ fallback
-    let playing = false;
-    let waited = 0;
-    while (waited < MAX_WAIT_FOR_VIDEO_MS) {
-      tick(`กำลังตรวจสอบว่าโฆษณาเล่นหรือยัง... (${Math.round(waited / 1000)}s)`);
-      if (await isVideoPlaying(page)) { playing = true; break; }
-      await page.waitForTimeout(POLL_INTERVAL_MS);
-      waited += POLL_INTERVAL_MS;
-    }
-
-    if (playing) {
-      tick('โฆษณาเริ่มเล่นแล้ว กำลังรอให้นิ่ง...');
-      await page.waitForTimeout(EXTRA_WAIT_AFTER_PLAY_MS);
-    } else {
-      tick('ไม่พบวิดีโอ กำลังรอเพิ่มเติม...');
-      await page.waitForTimeout(FALLBACK_WAIT_MS);
+    // โฆษณาวิดีโอมักเล่นทันทีและจบเร็ว ต้องแคปภายใน CAPTURE_DEADLINE_MS
+    // หลังเปิดลิงก์ ไม่งั้นจะพลาดโฆษณาแล้วเจอแต่หน้าคอนเทนต์ปกติ
+    const remaining = CAPTURE_DEADLINE_MS - (Date.now() - pageOpenedAt);
+    if (remaining > 0) {
+      tick(`รอให้โฆษณาเล่น... (เหลือ ${Math.round(remaining / 1000)}s)`);
+      await page.waitForTimeout(remaining);
     }
 
     tick('กำลังแคปภาพหน้าจอ...');
