@@ -17,6 +17,7 @@
   input[type=number]{width:100px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px}
   button{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:.5rem}
   button:disabled{opacity:.5;cursor:not-allowed}
+  .btn-cancel{background:transparent;border:1px solid var(--red);color:var(--red);display:none}
   .log{margin-top:1.25rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:12px;max-height:240px;overflow-y:auto;display:none;white-space:pre-wrap;line-height:1.6}
   .progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px;display:none}
   .progress-fill{height:100%;background:var(--accent);width:0%;transition:width .2s}
@@ -40,6 +41,7 @@
     </div>
     <button type="submit" id="submitBtn">เริ่มแคปภาพและสร้าง PowerPoint</button>
   </form>
+  <button type="button" id="cancelBtn" class="btn-cancel">⏹ ยกเลิกการทำงาน</button>
 
   <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
   <div class="log" id="log"></div>
@@ -49,10 +51,12 @@
 <script>
 const form = document.getElementById('form');
 const submitBtn = document.getElementById('submitBtn');
+const cancelBtn = document.getElementById('cancelBtn');
 const logEl = document.getElementById('log');
 const progressBar = document.getElementById('progressBar');
 const progressFill = document.getElementById('progressFill');
 const downloadEl = document.getElementById('download');
+let currentJobId = null;
 
 function appendLog(text, isErr){
   logEl.style.display = 'block';
@@ -63,9 +67,18 @@ function appendLog(text, isErr){
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+function stopUI(){
+  submitBtn.disabled = false;
+  cancelBtn.style.display = 'none';
+  cancelBtn.disabled = false;
+  cancelBtn.textContent = '⏹ ยกเลิกการทำงาน';
+  currentJobId = null;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   submitBtn.disabled = true;
+  cancelBtn.style.display = 'block';
   logEl.innerHTML = '';
   downloadEl.style.display = 'none';
   progressBar.style.display = 'block';
@@ -78,8 +91,9 @@ form.addEventListener('submit', async (e) => {
   try {
     const res = await fetch('/api/generate', { method: 'POST', body: formData });
     const data = await res.json();
-    if (data.error) { appendLog('ผิดพลาด: ' + data.error, true); submitBtn.disabled = false; return; }
+    if (data.error) { appendLog('ผิดพลาด: ' + data.error, true); stopUI(); return; }
 
+    currentJobId = data.jobId;
     const evtSource = new EventSource('/api/progress/' + data.jobId);
     evtSource.onmessage = (msg) => {
       const ev = JSON.parse(msg.data);
@@ -96,18 +110,38 @@ form.addEventListener('submit', async (e) => {
         appendLog('เสร็จสิ้น! กดปุ่มด้านล่างเพื่อดาวน์โหลด');
         downloadEl.href = ev.downloadUrl;
         downloadEl.style.display = 'block';
-        submitBtn.disabled = false;
+        stopUI();
+        evtSource.close();
+      } else if (ev.type === 'cancelled') {
+        appendLog('ยกเลิกแล้ว — ดาวน์โหลดผลลัพธ์ที่ทำไปแล้วได้');
+        downloadEl.href = ev.downloadUrl;
+        downloadEl.style.display = 'block';
+        stopUI();
         evtSource.close();
       } else if (ev.type === 'error') {
         appendLog('เกิดข้อผิดพลาด: ' + ev.error, true);
-        submitBtn.disabled = false;
+        stopUI();
         evtSource.close();
       }
     };
     evtSource.onerror = () => { evtSource.close(); };
   } catch (err) {
     appendLog('ผิดพลาด: ' + err.message, true);
-    submitBtn.disabled = false;
+    stopUI();
+  }
+});
+
+cancelBtn.addEventListener('click', async () => {
+  if (!currentJobId) return;
+  cancelBtn.disabled = true;
+  cancelBtn.textContent = 'กำลังยกเลิก...';
+  appendLog('กำลังขอยกเลิก...');
+  try {
+    await fetch('/api/cancel/' + currentJobId, { method: 'POST' });
+  } catch (err) {
+    appendLog('ยกเลิกไม่สำเร็จ: ' + err.message, true);
+    cancelBtn.disabled = false;
+    cancelBtn.textContent = '⏹ ยกเลิกการทำงาน';
   }
 });
 </script>

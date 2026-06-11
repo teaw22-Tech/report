@@ -27,7 +27,8 @@ app.post('/api/generate', upload.single('excel'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'ไม่พบไฟล์ที่อัปโหลด' });
 
   const jobId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const job = { clients: new Set(), log: [], done: false, file: null, error: null };
+  const controller = { cancelled: false, currentPage: null };
+  const job = { clients: new Set(), log: [], done: false, file: null, error: null, controller };
   jobs.set(jobId, job);
   res.json({ jobId });
 
@@ -41,13 +42,17 @@ app.post('/api/generate', upload.single('excel'), async (req, res) => {
 
     const results = await runCapture(ads, shotsDir, waitSeconds, (p) => {
       sendEvent(job, { type: 'progress', ...p });
-    });
+    }, controller);
 
     const outFile = path.join(jobDir, 'Ads_Capture.pptx');
     await buildPptx(results, outFile);
 
     job.file = outFile;
-    sendEvent(job, { type: 'done', downloadUrl: `/api/download/${jobId}` });
+    if (controller.cancelled) {
+      sendEvent(job, { type: 'cancelled', downloadUrl: `/api/download/${jobId}` });
+    } else {
+      sendEvent(job, { type: 'done', downloadUrl: `/api/download/${jobId}` });
+    }
   } catch (err) {
     job.error = err.message;
     sendEvent(job, { type: 'error', error: err.message });
@@ -55,6 +60,17 @@ app.post('/api/generate', upload.single('excel'), async (req, res) => {
     job.done = true;
     fs.unlink(req.file.path, () => {});
   }
+});
+
+app.post('/api/cancel/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) return res.status(404).end();
+
+  job.controller.cancelled = true;
+  if (job.controller.currentPage) {
+    job.controller.currentPage.close().catch(() => {});
+  }
+  res.json({ ok: true });
 });
 
 app.get('/api/progress/:jobId', (req, res) => {

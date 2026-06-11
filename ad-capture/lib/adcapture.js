@@ -42,11 +42,13 @@ function readAdsFromExcel(filePath) {
   return ads;
 }
 
-async function captureOne(browser, ad, index, shotsDir, waitSeconds) {
+async function captureOne(browser, ad, index, shotsDir, waitSeconds, controller) {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
   });
+
+  if (controller) controller.currentPage = page;
 
   const fileName = `${String(index + 1).padStart(3, '0')}_${ad.type}.png`.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = path.join(shotsDir, fileName);
@@ -74,7 +76,7 @@ async function captureOne(browser, ad, index, shotsDir, waitSeconds) {
   }
 }
 
-async function runCapture(ads, shotsDir, waitSeconds, onProgress) {
+async function runCapture(ads, shotsDir, waitSeconds, onProgress, controller) {
   fs.mkdirSync(shotsDir, { recursive: true });
 
   const launchOptions = { args: ['--no-sandbox'] };
@@ -85,9 +87,11 @@ async function runCapture(ads, shotsDir, waitSeconds, onProgress) {
 
   const results = [];
   for (let i = 0; i < ads.length; i++) {
+    if (controller && controller.cancelled) break;
+
     const ad = ads[i];
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'running' });
-    const result = await captureOne(browser, ad, i, shotsDir, waitSeconds);
+    const result = await captureOne(browser, ad, i, shotsDir, waitSeconds, controller);
     results.push(result);
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error });
   }
