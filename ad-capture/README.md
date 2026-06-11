@@ -100,6 +100,12 @@ Variable บน Render:
    cd ad-capture
    npm run login
    ```
+
+   > ⚠️ ถ้า login Google/YouTube ไม่ได้ (ขึ้น "This browser or app may not be
+   > secure") ให้รันคำสั่งนี้ก่อน 1 ครั้ง แล้วค่อยรัน `npm run login` ใหม่:
+   > ```
+   > npx playwright install --with-deps chrome
+   > ```
 6. สลับไปที่แท็บ Desktop (noVNC) จากข้อ 4 — จะเห็นหน้าต่างเบราว์เซอร์ Chromium เปิดขึ้นมา
    → Login เข้าบัญชี Google/YouTube และ WeTV ให้เรียบร้อยในหน้าต่างนี้
 7. กลับไปที่แท็บ Terminal (VS Code) → กด **Enter** ตามที่ขึ้นข้อความ

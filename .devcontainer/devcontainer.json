@@ -13,5 +13,5 @@
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "cd ad-capture && npm install && npx playwright install --with-deps chromium"
+  "postCreateCommand": "cd ad-capture && npm install && npx playwright install --with-deps chromium chrome"
 }

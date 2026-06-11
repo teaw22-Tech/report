@@ -9,8 +9,28 @@ const OUT_FILE = path.join(__dirname, 'storageState.json');
 const B64_FILE = path.join(__dirname, 'storageState.b64.txt');
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext();
+  // ใช้ Chrome ตัวเต็ม (ไม่ใช่ Chromium) + ปิด flag ที่บอก Google ว่าเป็น automation
+  // เพราะ Google มักขึ้น "This browser or app may not be secure" แล้วบล็อก login
+  // ถ้าไม่ได้ติดตั้ง Chrome ไว้ จะ fallback ไปใช้ Chromium แทน
+  let browser;
+  const launchArgs = {
+    headless: false,
+    args: ['--disable-blink-features=AutomationControlled'],
+    ignoreDefaultArgs: ['--enable-automation'],
+  };
+  try {
+    browser = await chromium.launch({ ...launchArgs, channel: 'chrome' });
+  } catch (e) {
+    console.log('ไม่พบ Google Chrome ในเครื่อง ใช้ Chromium แทน (อาจ login บางเว็บไม่ได้)');
+    browser = await chromium.launch(launchArgs);
+  }
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    viewport: { width: 1280, height: 800 },
+  });
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  });
   const page = await context.newPage();
   await page.goto('https://www.youtube.com');
 
