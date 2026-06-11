@@ -58,6 +58,18 @@ npm run setup      # ติดตั้งเบราว์เซอร์ ค�
 npm run cli        # ได้ไฟล์ผลลัพธ์ใน output/
 ```
 
+## ตั้งรหัสผ่านเข้าหน้าเว็บ (แนะนำ)
+
+ป้องกันคนนอกเข้ามาใช้งานเว็บนี้โดยไม่ได้รับอนุญาต ทำได้โดยตั้ง Environment
+Variable บน Render:
+
+1. ไปที่ Render → service `ads-capture` → แท็บ **Environment**
+2. เพิ่ม `APP_USERNAME` (เช่น `team`) และ `APP_PASSWORD` (ตั้งรหัสผ่านเอง)
+3. กด **Save Changes** → Render redeploy อัตโนมัติ
+
+จากนั้นเมื่อเปิดเว็บ จะมี popup ให้กรอก username/password ก่อนถึงจะใช้งานได้
+(ถ้าไม่ตั้งค่าทั้งสองตัวนี้ เว็บจะเปิดใช้งานได้แบบสาธารณะเหมือนเดิม)
+
 ## ลิงก์ที่ต้อง login (YouTube/WeTV ขึ้น "Sign in" / "Please login")
 
 ถ้าลิงก์ไหนต้อง login เข้าบัญชีก่อนถึงจะดูได้ ระบบสามารถ "แอบอ้าง" session

@@ -8,3 +8,9 @@ services:
     envVars:
       - key: PORT
         value: 3000
+      - key: APP_USERNAME
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: BROWSER_STORAGE_STATE_B64
+        sync: false

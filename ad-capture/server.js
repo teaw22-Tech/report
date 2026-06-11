@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const multer = require('multer');
+const basicAuth = require('express-basic-auth');
 const { readAdsFromExcel, runCapture, buildPptx } = require('./lib/adcapture');
 
 const PORT = process.env.PORT || 3000;
@@ -10,6 +11,14 @@ fs.mkdirSync(WORK_DIR, { recursive: true });
 
 const upload = multer({ dest: path.join(__dirname, 'output', 'uploads') });
 const app = express();
+
+// ตั้ง APP_USERNAME / APP_PASSWORD บน Render เพื่อล็อกหน้าเว็บนี้ด้วย username/password
+if (process.env.APP_USERNAME && process.env.APP_PASSWORD) {
+  app.use(basicAuth({
+    users: { [process.env.APP_USERNAME]: process.env.APP_PASSWORD },
+    challenge: true,
+  }));
+}
 
 app.use(express.static(path.join(__dirname, 'public')));
 
