@@ -97,6 +97,14 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick) {
   const page = await browser.newPage({
     viewport: { width: 1024, height: 576 },
     ignoreHTTPSErrors: true,
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    locale: 'th-TH',
+    timezoneId: 'Asia/Bangkok',
+  });
+
+  // ลด signal ที่ทำให้ YouTube ตรวจจับว่าเป็น headless browser แล้วขึ้น "Sign in to confirm you're not a bot"
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
 
   if (controller) controller.currentPage = page;
@@ -170,6 +178,7 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
       '--disable-dev-shm-usage',
       '--disable-gpu',
       '--disable-software-rasterizer',
+      '--disable-blink-features=AutomationControlled',
       '--single-process',
       '--no-zygote',
       '--disable-extensions',
