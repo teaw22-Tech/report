@@ -32,7 +32,6 @@ app.post('/api/generate', upload.single('excel'), async (req, res) => {
   jobs.set(jobId, job);
   res.json({ jobId });
 
-  const waitSeconds = parseInt(req.body.waitSeconds || '8', 10);
   const jobDir = path.join(WORK_DIR, jobId);
   const shotsDir = path.join(jobDir, 'screenshots');
 
@@ -40,7 +39,7 @@ app.post('/api/generate', upload.single('excel'), async (req, res) => {
     const ads = readAdsFromExcel(req.file.path);
     sendEvent(job, { type: 'start', total: ads.length });
 
-    const results = await runCapture(ads, shotsDir, waitSeconds, (p) => {
+    const results = await runCapture(ads, shotsDir, (p) => {
       sendEvent(job, { type: 'progress', ...p });
     }, controller);
 

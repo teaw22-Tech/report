@@ -7,7 +7,6 @@ const { readAdsFromExcel, runCapture, buildPptx } = require('./lib/adcapture');
 const INPUT_FILE = process.env.INPUT_FILE || path.join(__dirname, 'input', 'ads.xlsx');
 const OUTPUT_DIR = path.join(__dirname, 'output');
 const SHOTS_DIR = path.join(OUTPUT_DIR, 'screenshots');
-const WAIT_SECONDS = parseInt(process.env.WAIT_SECONDS || '8', 10);
 
 (async () => {
   if (!fs.existsSync(INPUT_FILE)) {
@@ -19,7 +18,7 @@ const WAIT_SECONDS = parseInt(process.env.WAIT_SECONDS || '8', 10);
   const ads = readAdsFromExcel(INPUT_FILE);
   console.log(`พบทั้งหมด ${ads.length} รายการ`);
 
-  const results = await runCapture(ads, SHOTS_DIR, WAIT_SECONDS, (p) => {
+  const results = await runCapture(ads, SHOTS_DIR, (p) => {
     if (p.status === 'running') {
       process.stdout.write(`(${p.index + 1}/${p.total}) กำลังแคป: ${p.name} ... `);
     } else {

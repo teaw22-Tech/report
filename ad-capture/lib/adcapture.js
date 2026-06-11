@@ -42,7 +42,33 @@ function readAdsFromExcel(filePath) {
   return ads;
 }
 
-async function captureOne(browser, ad, index, shotsDir, waitSeconds, controller) {
+// เช็คว่ามีวิดีโอกำลังเล่นอยู่ในหน้าไหม (รวมถึงใน iframe)
+async function isVideoPlaying(page) {
+  const check = async (frame) => {
+    try {
+      return await frame.evaluate(() => {
+        const videos = document.querySelectorAll('video');
+        for (const v of videos) {
+          if (!v.paused && v.currentTime > 0 && !v.ended) return true;
+        }
+        return false;
+      });
+    } catch (_) {
+      return false;
+    }
+  };
+  for (const frame of page.frames()) {
+    if (await check(frame)) return true;
+  }
+  return false;
+}
+
+const MAX_WAIT_FOR_VIDEO_MS = 15000;
+const FALLBACK_WAIT_MS = 6000;
+const POLL_INTERVAL_MS = 1000;
+const EXTRA_WAIT_AFTER_PLAY_MS = 2000;
+
+async function captureOne(browser, ad, index, shotsDir, controller) {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
@@ -65,7 +91,20 @@ async function captureOne(browser, ad, index, shotsDir, waitSeconds, controller)
       }
     }
 
-    await page.waitForTimeout(waitSeconds * 1000);
+    // รอจนวิดีโอเริ่มเล่น (สูงสุด MAX_WAIT_FOR_VIDEO_MS) ถ้าไม่เจอเลยใช้เวลารอ fallback
+    let playing = false;
+    let waited = 0;
+    while (waited < MAX_WAIT_FOR_VIDEO_MS) {
+      if (await isVideoPlaying(page)) { playing = true; break; }
+      await page.waitForTimeout(POLL_INTERVAL_MS);
+      waited += POLL_INTERVAL_MS;
+    }
+
+    if (playing) {
+      await page.waitForTimeout(EXTRA_WAIT_AFTER_PLAY_MS);
+    } else {
+      await page.waitForTimeout(FALLBACK_WAIT_MS);
+    }
 
     await page.screenshot({ path: filePath, timeout: 90000 });
     await page.close();
@@ -76,7 +115,7 @@ async function captureOne(browser, ad, index, shotsDir, waitSeconds, controller)
   }
 }
 
-async function runCapture(ads, shotsDir, waitSeconds, onProgress, controller) {
+async function runCapture(ads, shotsDir, onProgress, controller) {
   fs.mkdirSync(shotsDir, { recursive: true });
 
   const launchOptions = { args: ['--no-sandbox'] };
@@ -91,7 +130,7 @@ async function runCapture(ads, shotsDir, waitSeconds, onProgress, controller) {
 
     const ad = ads[i];
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'running' });
-    const result = await captureOne(browser, ad, i, shotsDir, waitSeconds, controller);
+    const result = await captureOne(browser, ad, i, shotsDir, controller);
     results.push(result);
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: result.status, error: result.error });
   }
