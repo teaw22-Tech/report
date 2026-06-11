@@ -1,0 +1,4 @@
+node_modules/
+output/*.pptx
+output/screenshots/
+input/ads.xlsx
