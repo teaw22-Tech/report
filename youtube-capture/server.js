@@ -168,77 +168,64 @@ async function captureFrame(url) {
     });
     if (isBot) throw new Error('YouTube bot detection — กรุณาอัปโหลด cookies.txt ใหม่จาก browser ที่ login แล้ว');
 
-    // Force mute + play via evaluate (bypasses autoplay policy)
+    // Wait for video element to appear
+    await page.waitForSelector('video', { timeout: 15000 }).catch(() => {});
+
+    // Force mute and seek to second 5 directly (no need to play first)
     await page.evaluate(() => {
       const v = document.querySelector('video');
-      if (v) { v.muted = true; v.volume = 0; v.play().catch(() => {}); }
+      if (!v) return;
+      v.muted = true;
+      v.volume = 0;
+      v.currentTime = 5;
     });
-    // Also try clicking the play button as fallback
+
+    // Try clicking play button to trigger video load
     try { await page.click('button.ytp-large-play-button', { timeout: 3000 }); } catch {}
+    try { await page.keyboard.press('k'); } catch {} // YouTube shortcut to play/pause
+
+    // Also force play via JS
     await page.evaluate(() => {
       const v = document.querySelector('video');
       if (v) { v.muted = true; v.play().catch(() => {}); }
     });
 
-    // Wait for video to actually produce frames (timeupdate = video is playing + has data)
-    const videoPlaying = await page.evaluate(() => new Promise(resolve => {
+    // Wait for video to have decoded frame data (readyState >= 2 means HAVE_CURRENT_DATA)
+    await page.waitForFunction(() => {
       const v = document.querySelector('video');
-      if (!v) return resolve(false);
-      if (v.videoWidth > 0 && v.currentTime > 0) return resolve(true);
-      v.muted = true;
-      v.play().catch(() => {});
-      const onUpdate = () => {
-        if (v.videoWidth > 0) { v.removeEventListener('timeupdate', onUpdate); resolve(true); }
-      };
-      v.addEventListener('timeupdate', onUpdate);
-      setTimeout(() => { v.removeEventListener('timeupdate', onUpdate); resolve(false); }, 20000);
-    }));
+      return v && v.readyState >= 2 && v.videoWidth > 0;
+    }, { timeout: 25000 }).catch(() => {});
 
-    console.log('Video playing:', videoPlaying);
-
-    // Seek to second 5 and wait for seeked
-    const seeked = await page.evaluate(() => new Promise(resolve => {
+    // Seek to second 5 after video has data
+    await page.evaluate(() => {
       const v = document.querySelector('video');
-      if (!v || v.videoWidth === 0) return resolve(false);
-      v.muted = true;
-      v.currentTime = 5;
-      if (v.seeking) {
-        const onSeeked = () => { v.removeEventListener('seeked', onSeeked); resolve(true); };
-        v.addEventListener('seeked', onSeeked);
-        setTimeout(() => { v.removeEventListener('seeked', onSeeked); resolve(true); }, 5000);
-      } else {
-        resolve(true);
-      }
-    }));
-    // Small pause to let frame render
-    await page.waitForTimeout(500);
-
-    console.log('Seeked to 5s:', seeked, '— capturing via canvas');
-
-    // Capture frame directly from video via Canvas API (not screenshot)
-    const frameBase64 = await page.evaluate(() => {
-      const v = document.querySelector('video');
-      if (!v || v.videoWidth === 0 || v.videoHeight === 0) return null;
-      const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 480;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, 640, 480);
-      const vr = v.videoWidth / v.videoHeight;
-      const cr = 640 / 480;
-      let sw = 640, sh = 480, sx = 0, sy = 0;
-      if (vr > cr) { sh = 640 / vr; sy = (480 - sh) / 2; }
-      else { sw = 480 * vr; sx = (640 - sw) / 2; }
-      ctx.drawImage(v, sx, sy, sw, sh);
-      return canvas.toDataURL('image/png').split(',')[1];
+      if (v && v.videoWidth > 0) { v.muted = true; v.currentTime = 5; }
     });
+    await page.waitForTimeout(1500);
+
+    console.log('Capturing video frame via element screenshot');
+
+    // Use Playwright element screenshot — captures actual rendered pixels including video frame
+    const videoEl = await page.$('video');
+    let frameBase64 = null;
+
+    if (videoEl) {
+      // Check if video has actual frame data
+      const hasFrame = await page.evaluate(() => {
+        const v = document.querySelector('video');
+        return v && v.videoWidth > 0 && v.videoHeight > 0 && v.readyState >= 2;
+      });
+
+      if (hasFrame) {
+        // Screenshot the video element directly (Playwright renders actual decoded frame)
+        const buf = await videoEl.screenshot({ type: 'png' });
+        frameBase64 = buf.toString('base64');
+      }
+    }
 
     if (!frameBase64) throw new Error('ไม่สามารถดึง frame จากวิดีโอได้ — วิดีโออาจไม่โหลด หรือ cookies หมดอายุ');
 
     return { success: true, data: Buffer.from(frameBase64, 'base64') };
-
-    return { success: true, data: screenshot };
   } catch (err) {
     console.error('captureFrame error:', err.message);
     // Kill browser on error so next request gets fresh one
