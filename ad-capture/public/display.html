@@ -131,41 +131,58 @@ if (gotoUrl) {
   },1000);
 
 /* ═══════════════════════════════════════════════════════
-   CONTROLLER MODE  — reads localStorage config, runs everything
+   CONTROLLER MODE  — reads config via BroadcastChannel + localStorage
    ═══════════════════════════════════════════════════════ */
 } else {
-  function tryStartController() {
-    let cfg=null;
-    try{ cfg=JSON.parse(localStorage.getItem('adsCapConfig')||'null'); }catch(_){}
-    if(cfg&&cfg.ads&&cfg.ads.length>0){
-      document.getElementById('idleView').style.display='none';
-      document.getElementById('ctrlView').style.display='block';
-      localStorage.removeItem('adsCapConfig');
-      runController(cfg).catch(e=>{
-        document.getElementById('sMain').textContent='❌ '+e.message;
-      });
-      return true;
+  let started = false;
+
+  function startWithConfig(cfg) {
+    if (started) return;
+    if (!cfg || !cfg.ads || !cfg.ads.length) return;
+    started = true;
+    document.getElementById('idleView').style.display = 'none';
+    document.getElementById('ctrlView').style.display = 'block';
+    localStorage.removeItem('adsCapConfig');
+    runController(cfg).catch(e => {
+      document.getElementById('sMain').textContent = '❌ ' + e.message;
+    });
+  }
+
+  // วิธีที่ 1: BroadcastChannel (วิธีหลัก — ส่งข้อมูลระหว่าง tab ได้เสมอ)
+  const bc = new BroadcastChannel('ads-capture-config');
+  bc.onmessage = (e) => {
+    if (e.data?.type === 'config') {
+      bc.close();
+      startWithConfig(e.data.data);
     }
-    return false;
-  }
+  };
 
-  if(!tryStartController()){
-    // Poll ทุก 500ms รอ index.html ส่ง config มา (กรณี timing หรือ tab เก่า)
-    let polls=0;
-    const idleSub=document.createElement('div');
-    idleSub.style.cssText='font-size:12px;color:#444d56;margin-top:8px';
-    idleSub.textContent='รอ config จาก Ads Capture...';
-    document.getElementById('idleView').appendChild(idleSub);
-
-    const poll=setInterval(()=>{
-      polls++;
-      if(tryStartController()){ clearInterval(poll); return; }
-      if(polls>=120){ // 60 วินาที
-        clearInterval(poll);
-        idleSub.textContent='หมดเวลา — กรุณากลับไปกด เริ่ม Capture ที่หน้าหลัก';
-      }
-    },500);
+  // วิธีที่ 2: localStorage (fallback — กรณี BroadcastChannel ล่าช้า)
+  function tryLocalStorage() {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('adsCapConfig') || 'null');
+      if (cfg) startWithConfig(cfg);
+    } catch(_) {}
   }
+  tryLocalStorage();
+
+  // Poll localStorage ทุก 500ms สูงสุด 60 วินาที
+  const idleSub = document.createElement('div');
+  idleSub.style.cssText = 'font-size:13px;color:#1D9E75;margin-top:12px';
+  idleSub.textContent = '⏳ รอ config จาก Ads Capture...';
+  document.getElementById('idleView').appendChild(idleSub);
+
+  let polls = 0;
+  const poll = setInterval(() => {
+    if (started) { clearInterval(poll); return; }
+    polls++;
+    tryLocalStorage();
+    if (polls >= 120) {
+      clearInterval(poll);
+      bc.close();
+      idleSub.textContent = '⏰ หมดเวลา — กรุณากลับไปกด เริ่ม Capture ที่หน้าหลัก';
+    }
+  }, 500);
 }
 
 /* ─────────────────────────────────────────────────────── */

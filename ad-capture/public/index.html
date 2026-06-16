@@ -338,13 +338,14 @@ function resetPreview() {
 async function startClientCapture() {
   if (!parsedAds.length) { alert('กรุณาโหลด Excel ก่อน'); return; }
 
-  // บันทึก config ลง localStorage → display.html จะอ่านและทำ capture ทั้งหมดเอง
   const config = {
     ads: parsedAds.map((ad, i) => ({
       ...ad,
       waitSec: parseInt(document.getElementById(`wait-${i}`)?.value || '10')
     }))
   };
+
+  // เก็บ config ด้วยหลายวิธีเพื่อความมั่นใจ
   localStorage.setItem('adsCapConfig', JSON.stringify(config));
 
   // Reset UI
@@ -357,8 +358,9 @@ async function startClientCapture() {
   ['s1','s2','s3','s4'].forEach((id, i) => stepReset(id, (i+1)+'️⃣', id === 's3' ? 'รอเริ่ม...' : ''));
 
   stepDone('s1', `${parsedAds.length} รายการ (พร้อม)`);
+  stepActive('s2', '⏳ เปิด Ads Display tab...');
 
-  // เปิด display.html เป็น tab ใหม่ — display.html จะทำ capture ทั้งหมดเอง
+  // เปิด display.html tab
   displayWin = window.open('/display.html', '_blank');
   if (!displayWin) {
     stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup ที่ address bar แล้วลองใหม่');
@@ -366,14 +368,23 @@ async function startClientCapture() {
     return;
   }
 
-  stepDone('s2', 'เปิด Ads Display tab แล้ว ✅ — กรุณาดำเนินการในหน้าต่างนั้น');
+  // ส่ง config ผ่าน BroadcastChannel ทันทีและหลังจากนั้น (รอให้ display.html โหลด)
+  const bc = new BroadcastChannel('ads-capture-config');
+  const sendConfig = () => bc.postMessage({ type: 'config', data: config });
+  sendConfig();
+  setTimeout(sendConfig, 800);
+  setTimeout(sendConfig, 2000);
+  setTimeout(sendConfig, 4000);
+
+  stepDone('s2', 'เปิด Ads Display tab แล้ว ✅ — กรุณาสลับไปที่ tab นั้น');
   stepActive('s3', 'รอ capture จาก Ads Display tab...');
   document.getElementById('progressFill').style.width = '40%';
 
-  // รอผลลัพธ์จาก display.html ผ่าน postMessage
+  // รอผลลัพธ์จาก display.html
   window.addEventListener('message', function handler(e) {
     if (e.data?.type === 'capture_done') {
       window.removeEventListener('message', handler);
+      bc.close();
       document.getElementById('progressFill').style.width = '100%';
       stepDone('s3', 'ถ่ายภาพเสร็จสมบูรณ์ ✅');
       stepDone('s4', 'PowerPoint พร้อมดาวน์โหลด 🎉');
