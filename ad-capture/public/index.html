@@ -106,9 +106,9 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
     <div class="share-hint" id="shareHint">
       <b>วิธีใช้งาน My Browser Capture:</b><br>
       1️⃣ เลือกไฟล์ Excel แล้วกด <b>เริ่ม</b><br>
-      2️⃣ เบราว์เซอร์จะเปิดหน้าต่างแสดงผลขึ้นมา → <b>อย่าปิด</b><br>
-      3️⃣ เมื่อถูกถามให้แชร์หน้าจอ ให้เลือก <b>"หน้าต่าง Ads Display"</b> แล้วกด Share<br>
-      4️⃣ รอระบบเปิดลิงก์โฆษณาทีละอัน แล้ว PPTX จะดาวน์โหลดอัตโนมัติ
+      2️⃣ เบราว์เซอร์เปิด tab ใหม่ชื่อ <b>"Ads Capture Display"</b> → <b>อย่าปิด</b><br>
+      3️⃣ เมื่อถูกถามให้แชร์หน้าจอ → เลือก <b>"Chrome Tab"</b> → เลือก <b>"Ads Capture Display"</b> → กด <b>Share</b><br>
+      4️⃣ กลับมาที่ tab นี้ ระบบจะแคปโฆษณาทีละอันอัตโนมัติ แล้วดาวน์โหลด PPTX ให้เลย
     </div>
     <div class="field">
       <label>ไฟล์ Excel (.xlsx)</label>
@@ -134,7 +134,7 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
     </div>
     <div class="step" id="s2">
       <div class="step-icon">2️⃣</div>
-      <div class="step-text">เปิดหน้าต่างแสดงผล + ขอแชร์หน้าจอ<div class="step-sub" id="s2sub"></div></div>
+      <div class="step-text">เปิด tab แสดงผล → เลือก "Chrome Tab" → "Ads Capture Display" → Share<div class="step-sub" id="s2sub"></div></div>
     </div>
     <div class="step" id="s3">
       <div class="step-icon">3️⃣</div>
@@ -245,34 +245,28 @@ async function startClientCapture() {
     const ads = parseData.ads;
     stepDone('s1', `พบ ${ads.length} รายการ`);
 
-    // ── STEP 2: Open display window + request screen share ───────────────────
-    stepActive('s2', 'กำลังเปิดหน้าต่างแสดงผล...');
+    // ── STEP 2: Open display TAB + request screen share ─────────────────────
+    stepActive('s2', 'กำลังเปิด tab แสดงผล...');
 
-    // Open display window — must happen synchronously from user gesture context
-    displayWin = window.open('', 'AdsDisplay',
-      'width=1280,height=720,left=60,top=60,toolbar=no,menubar=no,scrollbars=no');
+    // เปิดเป็น Chrome Tab (ไม่ใส่ features = tab) เพื่อให้ user เลือกใน "Chrome Tab" picker
+    displayWin = window.open('/display', 'AdsDisplay');
     if (!displayWin) {
-      stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup แล้วลองใหม่');
+      stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup/tab แล้วลองใหม่');
       return resetClientUI();
     }
-    displayWin.document.write(`<!DOCTYPE html><html><head><title>Ads Display</title>
-      <style>body{margin:0;background:#111;color:#fff;font-family:sans-serif;
-      display:flex;align-items:center;justify-content:center;height:100vh;font-size:22px}</style>
-      </head><body><div>📺 Ads Display Window<br>
-      <span style="font-size:14px;color:#aaa">กรุณาเลือกหน้าต่างนี้เมื่อถูกถามให้แชร์หน้าจอ</span>
-      </div></body></html>`);
-    displayWin.document.close();
 
-    await sleep(800);
+    // รอให้ tab เปิดก่อน แล้วค่อยแสดง share dialog
+    await sleep(1200);
 
-    stepActive('s2', 'กรุณาเลือก "Ads Display" ในหน้าต่างที่ถามให้แชร์หน้าจอ...');
+    stepActive('s2', '🔴 กรุณาเลือก "Chrome Tab" → "Ads Capture Display" → กด Share');
     try {
       captureStream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 2, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
+        // preferCurrentTab: false เพื่อให้ user เลือก tab แสดงผลได้
       });
     } catch (err) {
-      stepError('s2', 'ยกเลิกการแชร์หน้าจอ — กรุณาลองใหม่แล้วกด Share');
+      stepError('s2', 'ยกเลิกการแชร์ — กรุณาลองใหม่ แล้วเลือก "Chrome Tab" → "Ads Capture Display"');
       if (displayWin) { displayWin.close(); displayWin = null; }
       return resetClientUI();
     }
