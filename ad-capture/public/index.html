@@ -345,36 +345,43 @@ async function startClientCapture() {
     }))
   };
 
-  // เก็บ config ด้วยหลายวิธีเพื่อความมั่นใจ
-  localStorage.setItem('adsCapConfig', JSON.stringify(config));
-
   // Reset UI
   document.getElementById('btnClient').disabled = true;
   document.getElementById('cancelClient').style.display = 'none';
   document.getElementById('downloadLink').style.display = 'none';
   document.getElementById('progressBar').style.display = 'block';
-  document.getElementById('progressFill').style.width = '20%';
+  document.getElementById('progressFill').style.width = '10%';
   document.getElementById('steps').style.display = 'flex';
   ['s1','s2','s3','s4'].forEach((id, i) => stepReset(id, (i+1)+'️⃣', id === 's3' ? 'รอเริ่ม...' : ''));
 
   stepDone('s1', `${parsedAds.length} รายการ (พร้อม)`);
-  stepActive('s2', '⏳ เปิด Ads Display tab...');
+  stepActive('s2', '⏳ กำลังสร้าง session...');
 
-  // เปิด display.html tab
-  displayWin = window.open('/display.html', '_blank');
+  // ส่ง config ไปเก็บที่ server ก่อน แล้วค่อยเปิด display.html พร้อม sessionId ใน URL
+  let sessionId;
+  try {
+    const r = await fetch('/api/capture-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    const d = await r.json();
+    sessionId = d.sessionId;
+  } catch (err) {
+    stepError('s2', 'ไม่สามารถสร้าง session ได้: ' + err.message);
+    resetClientUI();
+    return;
+  }
+
+  document.getElementById('progressFill').style.width = '25%';
+
+  // เปิด display.html พร้อม sessionId ใน URL parameter (วิธีที่แน่นอนที่สุด)
+  displayWin = window.open('/display.html?session=' + sessionId, '_blank');
   if (!displayWin) {
     stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup ที่ address bar แล้วลองใหม่');
     resetClientUI();
     return;
   }
-
-  // ส่ง config ผ่าน BroadcastChannel ทันทีและหลังจากนั้น (รอให้ display.html โหลด)
-  const bc = new BroadcastChannel('ads-capture-config');
-  const sendConfig = () => bc.postMessage({ type: 'config', data: config });
-  sendConfig();
-  setTimeout(sendConfig, 800);
-  setTimeout(sendConfig, 2000);
-  setTimeout(sendConfig, 4000);
 
   stepDone('s2', 'เปิด Ads Display tab แล้ว ✅ — กรุณาสลับไปที่ tab นั้น');
   stepActive('s3', 'รอ capture จาก Ads Display tab...');
@@ -384,7 +391,6 @@ async function startClientCapture() {
   window.addEventListener('message', function handler(e) {
     if (e.data?.type === 'capture_done') {
       window.removeEventListener('message', handler);
-      bc.close();
       document.getElementById('progressFill').style.width = '100%';
       stepDone('s3', 'ถ่ายภาพเสร็จสมบูรณ์ ✅');
       stepDone('s4', 'PowerPoint พร้อมดาวน์โหลด 🎉');

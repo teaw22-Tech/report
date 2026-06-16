@@ -110,6 +110,22 @@ app.get('/api/download/:jobId', (req, res) => {
 
 // ── Client-side capture endpoints ──────────────────────────────────────────
 
+// ── Capture session store (pass config via URL instead of localStorage) ─────
+const captureSessions = new Map();
+
+app.post('/api/capture-session', express.json({ limit: '5mb' }), (req, res) => {
+  const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  captureSessions.set(sessionId, req.body);
+  setTimeout(() => captureSessions.delete(sessionId), 600000); // 10 min TTL
+  res.json({ sessionId });
+});
+
+app.get('/api/capture-session/:id', (req, res) => {
+  const data = captureSessions.get(req.params.id);
+  if (!data) return res.status(404).json({ error: 'session not found or expired' });
+  res.json(data); // ไม่ลบ เผื่อ retry
+});
+
 // รับ Excel → คืนรายการ {name, type, url} ให้ browser ทำ capture เอง
 app.post('/api/parse-excel', upload.single('excel'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'ไม่พบไฟล์' });
