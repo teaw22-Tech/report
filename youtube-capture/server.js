@@ -119,6 +119,7 @@ async function captureFrame(rawUrl) {
           '-o', videoPath,
           '--no-warnings',
           '--no-part',
+          '--add-header', 'Referer:https://www.youtube.com/',
         ];
         if (cookiesContent) args.push('--cookies', COOKIES_PATH);
         args.push(cleanUrl);
@@ -172,16 +173,20 @@ async function captureFrame(rawUrl) {
   }
 }
 
-// Clean YouTube URL — strip all params except v=
+// Clean YouTube URL — preserve force_ad_encrypted if present, strip other junk
 function cleanYouTubeUrl(url) {
   try {
     const u = new URL(url);
-    if (u.hostname === 'youtu.be') {
-      return `https://youtu.be${u.pathname}`;
-    }
+    if (u.hostname === 'youtu.be') return `https://youtu.be${u.pathname}`;
+
     const v = u.searchParams.get('v');
-    if (v) return `https://www.youtube.com/watch?v=${v}`;
-    return url;
+    const adToken = u.searchParams.get('force_ad_encrypted');
+
+    if (!v) return url;
+
+    // Keep force_ad_encrypted — it's the auth token for Ad preview videos
+    if (adToken) return `https://www.youtube.com/watch?v=${v}&force_ad_encrypted=${adToken}`;
+    return `https://www.youtube.com/watch?v=${v}`;
   } catch { return url; }
 }
 
