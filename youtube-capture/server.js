@@ -113,24 +113,61 @@ app.post('/capture-batch', async (req, res) => {
   }
 });
 
-// Single capture → PNG
-app.post('/capture', async (req, res) => {
+// Single capture → base64 JSON (for preview)
+app.post('/capture-single', async (req, res) => {
   const { url } = req.body;
   if (!url || !isYouTubeUrl(url))
-    return res.status(400).json({ error: 'กรุณาใส่ YouTube URL ที่ถูกต้อง' });
+    return res.status(400).json({ error: 'URL ไม่ถูกต้อง' });
   if (isProcessing)
-    return res.status(429).json({ error: 'ระบบกำลังประมวลผลอยู่' });
+    return res.status(429).json({ error: 'ระบบกำลังประมวลผลอยู่ กรุณารอ' });
 
   isProcessing = true;
   try {
     const result = await captureFrame(url);
-    if (!result.success) throw new Error(result.error);
-    res.set('Content-Type', 'image/png');
-    res.send(result.data);
+    if (!result.success) return res.status(500).json({ error: result.error });
+    res.json({ image: result.data.toString('base64') });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {
     isProcessing = false;
+  }
+});
+
+// Build PPTX from pre-captured base64 images (no re-capture)
+app.post('/build-pptx', async (req, res) => {
+  const { items } = req.body; // [{ url, image: base64|null, error }]
+  if (!Array.isArray(items) || items.length === 0)
+    return res.status(400).json({ error: 'ไม่มีข้อมูลสำหรับสร้าง PowerPoint' });
+
+  try {
+    const pptx = new PptxGenJS();
+    pptx.layout = 'LAYOUT_16x9';
+
+    for (let i = 0; i < items.length; i++) {
+      const { url, image, error } = items[i];
+      const slide = pptx.addSlide();
+      slide.background = { color: '000000' };
+
+      if (image) {
+        slide.addImage({ data: `image/png;base64,${image}`, x: 0, y: 0, w: '100%', h: '100%' });
+        slide.addText(`${i + 1}. ${url}`, {
+          x: 0.1, y: 6.8, w: 9.8, h: 0.3,
+          fontSize: 8, color: 'ffffff', transparency: 50,
+        });
+      } else {
+        slide.addText(`❌ Slide ${i + 1}\n${error || 'capture failed'}\n\n${url}`, {
+          x: 0.5, y: 2.2, w: 9, h: 2.5,
+          fontSize: 13, color: 'ff6b6b', align: 'center', breakLine: true,
+        });
+      }
+    }
+
+    const buf = await pptx.write({ outputType: 'nodebuffer' });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.set('Content-Disposition', 'attachment; filename="youtube-captures.pptx"');
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

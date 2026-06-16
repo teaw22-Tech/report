@@ -8,27 +8,19 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
-  background: #0f0f0f;
-  color: #e8e8e8;
-  min-height: 100vh;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 2rem 1rem;
+  background: #0f0f0f; color: #e8e8e8;
+  min-height: 100vh; padding: 2rem 1rem;
+  display: flex; flex-direction: column; align-items: center;
 }
 .card {
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  border-radius: 16px;
-  padding: 2rem;
-  width: 100%;
-  max-width: 680px;
+  background: #1a1a1a; border: 1px solid #2a2a2a;
+  border-radius: 16px; padding: 2rem;
+  width: 100%; max-width: 700px;
 }
 .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; }
 .logo-icon {
   background: #ff0000; border-radius: 8px;
-  width: 36px; height: 36px;
-  display: flex; align-items: center; justify-content: center; font-size: 18px;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 18px;
 }
 .logo h1 { font-size: 20px; font-weight: 700; }
 .logo span { font-size: 12px; color: #888; display: block; margin-top: 1px; }
@@ -39,90 +31,116 @@ body {
 }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: #ff4444; }
 
-/* URL list */
-.url-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+label { display: block; font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.url-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
 .url-row { display: flex; align-items: center; gap: 8px; }
 .url-num {
-  min-width: 24px; height: 24px; border-radius: 50%;
-  background: #2a2a2a; color: #888; font-size: 11px;
+  min-width: 22px; height: 22px; border-radius: 50%;
+  background: #2a2a2a; color: #666; font-size: 11px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: all .2s;
 }
 .url-row.has-value .url-num { background: #ff0000; color: #fff; }
 input[type="text"] {
   flex: 1; background: #111; border: 1px solid #2a2a2a;
-  border-radius: 8px; padding: 10px 12px;
-  color: #e8e8e8; font-size: 13px; outline: none;
-  transition: border-color .15s;
+  border-radius: 8px; padding: 9px 12px; color: #e8e8e8; font-size: 13px;
+  outline: none; transition: border-color .15s;
 }
 input[type="text"]:focus { border-color: #ff4444; }
-input[type="text"]::placeholder { color: #3a3a3a; }
+input[type="text"]::placeholder { color: #333; }
 .remove-btn {
-  background: none; border: none; color: #444; cursor: pointer;
-  font-size: 18px; padding: 4px; line-height: 1; border-radius: 4px;
-  transition: color .15s;
+  background: none; border: none; color: #333; cursor: pointer;
+  font-size: 18px; padding: 4px; line-height: 1; transition: color .15s;
 }
 .remove-btn:hover { color: #ff6b6b; }
-
 .add-btn {
-  background: none; border: 1px dashed #333; border-radius: 8px;
-  color: #555; font-size: 13px; padding: 9px;
-  width: 100%; cursor: pointer; transition: all .15s; margin-bottom: 1rem;
+  background: none; border: 1px dashed #2a2a2a; border-radius: 8px;
+  color: #444; font-size: 13px; padding: 8px; width: 100%;
+  cursor: pointer; transition: all .15s; margin-bottom: 1rem;
 }
 .add-btn:hover { border-color: #ff4444; color: #ff6b6b; }
-.add-btn:disabled { opacity: .4; cursor: not-allowed; }
+.add-btn:disabled { opacity: .35; cursor: not-allowed; }
 
-label { display: block; font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
-
-.capture-btn {
-  width: 100%; background: #ff0000; color: #fff; border: none;
-  border-radius: 8px; padding: 13px; font-size: 15px; font-weight: 600;
-  cursor: pointer; transition: opacity .15s;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
+.btn-row { display: flex; gap: 10px; margin-bottom: 1rem; }
+.btn {
+  flex: 1; border: none; border-radius: 8px; padding: 12px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: opacity .15s;
 }
-.capture-btn:hover { opacity: .88; }
-.capture-btn:disabled { opacity: .45; cursor: not-allowed; }
-
-.progress-area { margin-top: 1.25rem; display: none; }
-.progress-header { display: flex; justify-content: space-between; font-size: 12px; color: #888; margin-bottom: 8px; }
-.progress-bar-bg { background: #222; border-radius: 99px; height: 6px; overflow: hidden; margin-bottom: 12px; }
-.progress-bar { background: #ff0000; height: 100%; border-radius: 99px; transition: width .4s; width: 0%; }
-.progress-list { display: flex; flex-direction: column; gap: 6px; }
-.progress-item {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: #888;
-  background: #111; border-radius: 6px; padding: 8px 10px;
-}
-.progress-item .pi-status { font-size: 14px; flex-shrink: 0; }
-.progress-item .pi-url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.progress-item.done { color: #e8e8e8; }
-.progress-item.error .pi-url { color: #f87171; }
-
-.spinner {
-  width: 14px; height: 14px; border: 2px solid #333;
-  border-top-color: #ff0000; border-radius: 50%;
-  animation: spin .7s linear infinite; flex-shrink: 0;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-preview { background: #222; color: #e8e8e8; border: 1px solid #333; }
+.btn-preview:hover:not(:disabled) { background: #2a2a2a; }
+.btn-export { background: #ff0000; color: #fff; }
+.btn-export:hover:not(:disabled) { opacity: .88; }
 
 .error-box {
-  margin-top: 1rem; background: rgba(255,60,60,.08);
-  border: 1px solid rgba(255,60,60,.3); border-radius: 8px;
-  padding: 12px 14px; font-size: 13px; color: #f87171; display: none;
+  background: rgba(255,60,60,.08); border: 1px solid rgba(255,60,60,.3);
+  border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #f87171;
+  margin-bottom: 1rem; display: none;
 }
-.download-area {
-  margin-top: 1.25rem; display: none;
+
+/* Preview grid */
+.preview-section { margin-top: 1.5rem; display: none; }
+.preview-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.preview-section-header h2 { font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: .05em; }
+.preview-count { font-size: 12px; color: #555; }
+.preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.preview-item {
   background: #111; border: 1px solid #2a2a2a; border-radius: 10px;
-  padding: 1rem; text-align: center;
+  overflow: hidden; position: relative;
 }
-.download-area p { font-size: 13px; color: #888; margin-bottom: 10px; }
+.preview-item-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; background: #161616; border-bottom: 1px solid #2a2a2a;
+}
+.pi-num {
+  width: 20px; height: 20px; border-radius: 50%; background: #ff0000;
+  color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.pi-url { font-size: 11px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.pi-status-icon { font-size: 14px; flex-shrink: 0; }
+.preview-img-wrap {
+  position: relative; background: #000;
+  aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center;
+}
+.preview-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: none; }
+.preview-img-wrap img.loaded { display: block; }
+.preview-placeholder {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: #444; font-size: 12px;
+}
+.spinner {
+  width: 24px; height: 24px; border: 2px solid #2a2a2a;
+  border-top-color: #ff0000; border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.pi-error-msg { color: #f87171; font-size: 11px; text-align: center; padding: 0 10px; }
+.pi-retry {
+  position: absolute; top: 6px; right: 6px;
+  background: rgba(0,0,0,.7); border: 1px solid #333; border-radius: 6px;
+  color: #aaa; font-size: 11px; padding: 3px 8px; cursor: pointer;
+  display: none;
+}
+.preview-item.error .pi-retry { display: block; }
+
+.export-area {
+  margin-top: 1.5rem; background: #111; border: 1px solid #2a2a2a;
+  border-radius: 10px; padding: 1.25rem; text-align: center; display: none;
+}
+.export-area p { font-size: 13px; color: #888; margin-bottom: 10px; }
 .dl-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: #1a1a2e; border: 1px solid #ff4444;
-  color: #ff6b6b; border-radius: 8px; padding: 10px 20px;
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,0,0,.12); border: 1px solid #ff4444;
+  color: #ff6b6b; border-radius: 8px; padding: 10px 22px;
   font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none;
   transition: background .15s;
 }
-.dl-btn:hover { background: rgba(255,0,0,.12); }
+.dl-btn:hover { background: rgba(255,0,0,.2); }
 </style>
 </head>
 <body>
@@ -134,34 +152,37 @@ label { display: block; font-size: 11px; color: #666; text-transform: uppercase;
       <span>Screenshot at second 5 → PowerPoint</span>
     </div>
   </div>
-
   <div class="badge"><div class="dot"></div> 1280×720 · วินาทีที่ 5 · ส่งออก .pptx</div>
 
   <label>YouTube URLs (สูงสุด 10 รายการ)</label>
   <div class="url-list" id="url-list"></div>
-
   <button class="add-btn" id="add-btn" onclick="addRow()">+ เพิ่ม URL</button>
-
-  <button class="capture-btn" id="capture-btn" onclick="startCapture()">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-    แคปเจอร์ทั้งหมด → PowerPoint
-  </button>
 
   <div class="error-box" id="error-box"></div>
 
-  <div class="progress-area" id="progress-area">
-    <div class="progress-header">
-      <span id="progress-label">กำลังประมวลผล...</span>
-      <span id="progress-count">0 / 0</span>
-    </div>
-    <div class="progress-bar-bg"><div class="progress-bar" id="progress-bar"></div></div>
-    <div class="progress-list" id="progress-list"></div>
+  <div class="btn-row">
+    <button class="btn btn-preview" id="preview-btn" onclick="startPreview()">
+      🔍 Preview ทั้งหมด
+    </button>
+    <button class="btn btn-export" id="export-btn" onclick="exportPptx()" disabled>
+      ⬇ ส่งออก PowerPoint
+    </button>
   </div>
 
-  <div class="download-area" id="download-area">
-    <p>✅ แคปเจอร์เสร็จแล้ว พร้อม download</p>
+  <!-- Preview Section -->
+  <div class="preview-section" id="preview-section">
+    <div class="preview-section-header">
+      <h2>Preview Screenshot</h2>
+      <span class="preview-count" id="preview-count"></span>
+    </div>
+    <div class="preview-grid" id="preview-grid"></div>
+  </div>
+
+  <!-- Download -->
+  <div class="export-area" id="export-area">
+    <p>✅ สร้าง PowerPoint เสร็จแล้ว</p>
     <a class="dl-btn" id="dl-link" href="#" download="youtube-captures.pptx">
-      ⬇ ดาวน์โหลด PowerPoint (.pptx)
+      ⬇ ดาวน์โหลด .pptx
     </a>
   </div>
 </div>
@@ -169,102 +190,187 @@ label { display: block; font-size: 11px; color: #666; text-transform: uppercase;
 <script>
 const MAX = 10;
 let rows = [];
+// Store captured images: { url, image: base64|null, error: str|null }
+let captured = [];
 
+// ── URL Rows ──────────────────────────────────────────────────
 function addRow(value = '') {
   if (rows.length >= MAX) return;
-  const id = Date.now();
-  rows.push(id);
+  const id = Date.now() + Math.random();
+  rows.push({ id, value });
   renderRows();
-  // Focus new input
   setTimeout(() => {
     const inputs = document.querySelectorAll('.url-input');
     inputs[inputs.length - 1]?.focus();
-  }, 50);
+  }, 40);
 }
 
 function removeRow(id) {
   if (rows.length <= 1) return;
-  rows = rows.filter(r => r !== id);
+  rows = rows.filter(r => r.id !== id);
   renderRows();
 }
 
 function renderRows() {
   const list = document.getElementById('url-list');
-  // Preserve existing values
   const existing = {};
   list.querySelectorAll('input').forEach(inp => { existing[inp.dataset.id] = inp.value; });
 
-  list.innerHTML = rows.map((id, i) => {
-    const val = existing[id] || '';
+  list.innerHTML = rows.map((r, i) => {
+    const val = existing[r.id] !== undefined ? existing[r.id] : r.value;
     return `
-    <div class="url-row${val ? ' has-value' : ''}" id="row-${id}">
+    <div class="url-row${val ? ' has-value' : ''}" id="row-${r.id}">
       <div class="url-num">${i + 1}</div>
-      <input type="text" class="url-input" data-id="${id}"
+      <input type="text" class="url-input" data-id="${r.id}"
         placeholder="https://www.youtube.com/watch?v=..."
-        value="${escHtml(val)}"
+        value="${esc(val)}"
         oninput="onInput(this)"
-        onkeydown="onKeyDown(event, ${i})">
-      ${rows.length > 1 ? `<button class="remove-btn" onclick="removeRow(${id})" title="ลบ">×</button>` : ''}
+        onkeydown="onKey(event,${i})">
+      ${rows.length > 1 ? `<button class="remove-btn" onclick="removeRow(${r.id})" title="ลบ">×</button>` : ''}
     </div>`;
   }).join('');
 
-  document.getElementById('add-btn').disabled = rows.length >= MAX;
-  document.getElementById('add-btn').textContent = `+ เพิ่ม URL (${rows.length}/${MAX})`;
+  const addBtn = document.getElementById('add-btn');
+  addBtn.disabled = rows.length >= MAX;
+  addBtn.textContent = `+ เพิ่ม URL (${rows.length}/${MAX})`;
 }
 
 function onInput(inp) {
-  const row = inp.closest('.url-row');
-  row.classList.toggle('has-value', !!inp.value.trim());
+  inp.closest('.url-row').classList.toggle('has-value', !!inp.value.trim());
+  // Reset export if URLs change
+  captured = [];
+  document.getElementById('export-btn').disabled = true;
+  document.getElementById('export-area').style.display = 'none';
 }
 
-function onKeyDown(e, idx) {
-  if (e.key === 'Enter') {
-    const inputs = document.querySelectorAll('.url-input');
-    if (idx < inputs.length - 1) inputs[idx + 1].focus();
-    else if (rows.length < MAX) addRow();
-  }
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+function onKey(e, idx) {
+  if (e.key !== 'Enter') return;
+  const inputs = document.querySelectorAll('.url-input');
+  if (idx < inputs.length - 1) inputs[idx + 1].focus();
+  else if (rows.length < MAX) addRow();
 }
 
 function getUrls() {
-  return [...document.querySelectorAll('.url-input')]
-    .map(i => i.value.trim()).filter(Boolean);
+  return [...document.querySelectorAll('.url-input')].map(i => i.value.trim()).filter(Boolean);
 }
 
-async function startCapture() {
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// ── Preview ───────────────────────────────────────────────────
+async function startPreview() {
   const urls = getUrls();
-  if (urls.length === 0) { showError('กรุณาใส่ URL อย่างน้อย 1 รายการ'); return; }
+  if (!urls.length) { showError('กรุณาใส่ URL อย่างน้อย 1 รายการ'); return; }
 
-  document.getElementById('error-box').style.display = 'none';
-  document.getElementById('download-area').style.display = 'none';
-  document.getElementById('capture-btn').disabled = true;
+  hideError();
+  captured = urls.map(url => ({ url, image: null, error: null }));
 
-  // Show progress
-  const pa = document.getElementById('progress-area');
-  pa.style.display = 'block';
-  document.getElementById('progress-count').textContent = `0 / ${urls.length}`;
-  document.getElementById('progress-label').textContent = 'กำลังส่งคำขอ...';
+  document.getElementById('export-btn').disabled = true;
+  document.getElementById('export-area').style.display = 'none';
+  document.getElementById('preview-btn').disabled = true;
+  document.getElementById('preview-btn').textContent = '⏳ กำลัง Preview...';
 
-  const pl = document.getElementById('progress-list');
-  pl.innerHTML = urls.map((u, i) => `
-    <div class="progress-item" id="pi-${i}">
-      <span class="pi-status">⏳</span>
-      <span class="pi-url">${i+1}. ${u}</span>
+  // Build grid with loading placeholders
+  const grid = document.getElementById('preview-grid');
+  grid.innerHTML = urls.map((url, i) => `
+    <div class="preview-item" id="pi-${i}">
+      <div class="preview-item-header">
+        <div class="pi-num">${i+1}</div>
+        <div class="pi-url" title="${esc(url)}">${url}</div>
+        <span class="pi-status-icon" id="pi-icon-${i}">⏳</span>
+      </div>
+      <div class="preview-img-wrap" id="pi-wrap-${i}">
+        <div class="preview-placeholder">
+          <div class="spinner"></div>
+          <span>กำลัง capture...</span>
+        </div>
+        <button class="pi-retry" onclick="retryOne(${i})">↺ ลองใหม่</button>
+      </div>
     </div>`).join('');
 
-  // Mark all as pending
-  urls.forEach((_, i) => updateItem(i, 'pending', ''));
+  document.getElementById('preview-section').style.display = 'block';
+  document.getElementById('preview-count').textContent = `0 / ${urls.length} เสร็จแล้ว`;
 
+  let done = 0;
+  // Capture sequentially (free tier: 1 at a time)
+  for (let i = 0; i < urls.length; i++) {
+    await captureOne(i, urls[i]);
+    done++;
+    document.getElementById('preview-count').textContent = `${done} / ${urls.length} เสร็จแล้ว`;
+  }
+
+  document.getElementById('preview-btn').disabled = false;
+  document.getElementById('preview-btn').textContent = '🔍 Preview ทั้งหมด';
+
+  const hasAny = captured.some(c => c.image);
+  document.getElementById('export-btn').disabled = !hasAny;
+}
+
+async function captureOne(i, url) {
+  setItemState(i, 'loading');
   try {
-    document.getElementById('progress-label').textContent = 'กำลัง capture และสร้าง PowerPoint...';
-
-    const res = await fetch('/capture-batch', {
+    const res = await fetch('/capture-single', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls }),
+      body: JSON.stringify({ url }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'เกิดข้อผิดพลาด');
+
+    captured[i].image = json.image;
+    captured[i].error = null;
+    setItemState(i, 'done', json.image);
+  } catch (err) {
+    captured[i].error = err.message;
+    captured[i].image = null;
+    setItemState(i, 'error', null, err.message);
+  }
+}
+
+async function retryOne(i) {
+  const url = captured[i]?.url;
+  if (!url) return;
+  await captureOne(i, url);
+  const hasAny = captured.some(c => c.image);
+  document.getElementById('export-btn').disabled = !hasAny;
+}
+
+function setItemState(i, state, b64, errMsg) {
+  const wrap = document.getElementById(`pi-wrap-${i}`);
+  const icon = document.getElementById(`pi-icon-${i}`);
+  const item = document.getElementById(`pi-${i}`);
+
+  item.classList.remove('error');
+
+  if (state === 'loading') {
+    icon.textContent = '⏳';
+    wrap.innerHTML = `<div class="preview-placeholder"><div class="spinner"></div><span>กำลัง capture...</span></div>
+      <button class="pi-retry" onclick="retryOne(${i})">↺ ลองใหม่</button>`;
+  } else if (state === 'done') {
+    icon.textContent = '✅';
+    wrap.innerHTML = `<img src="data:image/png;base64,${b64}" onload="this.classList.add('loaded')" alt="screenshot ${i+1}">
+      <button class="pi-retry" onclick="retryOne(${i})" style="display:block">↺ capture ใหม่</button>`;
+  } else if (state === 'error') {
+    icon.textContent = '❌';
+    item.classList.add('error');
+    wrap.innerHTML = `<div class="preview-placeholder"><span style="font-size:24px">⚠️</span>
+      <span class="pi-error-msg">${errMsg}</span></div>
+      <button class="pi-retry" onclick="retryOne(${i})">↺ ลองใหม่</button>`;
+  }
+}
+
+// ── Export PPTX ───────────────────────────────────────────────
+async function exportPptx() {
+  if (!captured.length) return;
+  const exportBtn = document.getElementById('export-btn');
+  exportBtn.disabled = true;
+  exportBtn.textContent = '⏳ กำลังสร้าง...';
+  hideError();
+
+  try {
+    const res = await fetch('/build-pptx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: captured }),
     });
 
     if (!res.ok) {
@@ -272,37 +378,19 @@ async function startCapture() {
       throw new Error(json.error || 'เกิดข้อผิดพลาด');
     }
 
-    // Mark all done (server processes sequentially, no per-item SSE for simplicity)
-    urls.forEach((_, i) => updateItem(i, 'done', ''));
-    setProgress(urls.length, urls.length);
-    document.getElementById('progress-label').textContent = 'เสร็จแล้ว!';
-
     const blob = await res.blob();
-    const objUrl = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const dl = document.getElementById('dl-link');
-    dl.href = objUrl;
+    dl.href = url;
     dl.download = 'youtube-captures.pptx';
-    document.getElementById('download-area').style.display = 'block';
+    document.getElementById('export-area').style.display = 'block';
+    dl.click(); // auto download
   } catch (err) {
     showError(err.message);
-    urls.forEach((_, i) => updateItem(i, 'error', err.message));
   } finally {
-    document.getElementById('capture-btn').disabled = false;
+    exportBtn.disabled = false;
+    exportBtn.textContent = '⬇ ส่งออก PowerPoint';
   }
-}
-
-function updateItem(i, state, msg) {
-  const el = document.getElementById(`pi-${i}`);
-  if (!el) return;
-  const icon = state === 'done' ? '✅' : state === 'error' ? '❌' : state === 'processing' ? '<span class="spinner"></span>' : '⏳';
-  el.querySelector('.pi-status').innerHTML = icon;
-  el.classList.toggle('done', state === 'done');
-  el.classList.toggle('error', state === 'error');
-}
-
-function setProgress(done, total) {
-  document.getElementById('progress-bar').style.width = (done / total * 100) + '%';
-  document.getElementById('progress-count').textContent = `${done} / ${total}`;
 }
 
 function showError(msg) {
@@ -310,8 +398,11 @@ function showError(msg) {
   el.textContent = '⚠ ' + msg;
   el.style.display = 'block';
 }
+function hideError() {
+  document.getElementById('error-box').style.display = 'none';
+}
 
-// Init with 3 rows
+// Init
 addRow(); addRow(); addRow();
 </script>
 </body>
