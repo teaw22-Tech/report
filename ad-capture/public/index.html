@@ -249,7 +249,7 @@ async function startClientCapture() {
     stepActive('s2', 'กำลังเปิด tab แสดงผล...');
 
     // เปิดเป็น Chrome Tab (ไม่ใส่ features = tab) เพื่อให้ user เลือกใน "Chrome Tab" picker
-    displayWin = window.open('/display', 'AdsDisplay');
+    displayWin = window.open('/display.html', 'AdsDisplay');
     if (!displayWin) {
       stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup/tab แล้วลองใหม่');
       return resetClientUI();
