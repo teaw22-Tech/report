@@ -132,7 +132,7 @@ async function captureFrame(url) {
     });
 
     console.log(`Navigating to: ${url}`);
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 40000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
 
     // Dismiss consent popup
     try {
@@ -147,29 +147,50 @@ async function captureFrame(url) {
     });
     if (isBot) throw new Error('YouTube bot detection — กรุณาอัปโหลด cookies.txt ใหม่จาก browser ที่ login แล้ว');
 
-    // Mute video + try to play
+    // Force mute + play via evaluate (bypasses autoplay policy)
     await page.evaluate(() => {
       const v = document.querySelector('video');
-      if (v) { v.muted = true; v.volume = 0; }
+      if (v) { v.muted = true; v.volume = 0; v.play().catch(() => {}); }
     });
-    try { await page.click('button.ytp-large-play-button', { timeout: 4000 }); } catch {}
-
-    // Wait for video to have decodable frames
-    await page.waitForFunction(() => {
+    // Also try clicking the play button as fallback
+    try { await page.click('button.ytp-large-play-button', { timeout: 3000 }); } catch {}
+    await page.evaluate(() => {
       const v = document.querySelector('video');
-      return v && v.readyState >= 2 && v.videoWidth > 0 && v.videoHeight > 0;
-    }, { timeout: 25000 }).catch(() => {});
+      if (v) { v.muted = true; v.play().catch(() => {}); }
+    });
 
-    // Seek to second 5 and wait for seeked event
+    // Wait for video to actually produce frames (timeupdate = video is playing + has data)
+    const videoPlaying = await page.evaluate(() => new Promise(resolve => {
+      const v = document.querySelector('video');
+      if (!v) return resolve(false);
+      if (v.videoWidth > 0 && v.currentTime > 0) return resolve(true);
+      v.muted = true;
+      v.play().catch(() => {});
+      const onUpdate = () => {
+        if (v.videoWidth > 0) { v.removeEventListener('timeupdate', onUpdate); resolve(true); }
+      };
+      v.addEventListener('timeupdate', onUpdate);
+      setTimeout(() => { v.removeEventListener('timeupdate', onUpdate); resolve(false); }, 20000);
+    }));
+
+    console.log('Video playing:', videoPlaying);
+
+    // Seek to second 5 and wait for seeked
     const seeked = await page.evaluate(() => new Promise(resolve => {
       const v = document.querySelector('video');
       if (!v || v.videoWidth === 0) return resolve(false);
       v.muted = true;
       v.currentTime = 5;
-      const onSeeked = () => { v.removeEventListener('seeked', onSeeked); resolve(true); };
-      v.addEventListener('seeked', onSeeked);
-      setTimeout(() => resolve(false), 5000);
+      if (v.seeking) {
+        const onSeeked = () => { v.removeEventListener('seeked', onSeeked); resolve(true); };
+        v.addEventListener('seeked', onSeeked);
+        setTimeout(() => { v.removeEventListener('seeked', onSeeked); resolve(true); }, 5000);
+      } else {
+        resolve(true);
+      }
     }));
+    // Small pause to let frame render
+    await page.waitForTimeout(500);
 
     console.log('Seeked to 5s:', seeked, '— capturing via canvas');
 
@@ -181,10 +202,8 @@ async function captureFrame(url) {
       canvas.width = 640;
       canvas.height = 480;
       const ctx = canvas.getContext('2d');
-      // Black background
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, 640, 480);
-      // Draw video frame scaled to fit
       const vr = v.videoWidth / v.videoHeight;
       const cr = 640 / 480;
       let sw = 640, sh = 480, sx = 0, sy = 0;
