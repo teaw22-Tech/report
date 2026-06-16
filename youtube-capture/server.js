@@ -91,62 +91,98 @@ app.post('/parse-excel', upload.single('file'), (req, res) => {
 });
 
 // Capture a single frame at second 5 using yt-dlp + ffmpeg
-async function captureFrame(url) {
+async function captureFrame(rawUrl) {
+  // Strip all extra params — keep only ?v=VIDEO_ID (handles force_ad_encrypted etc.)
+  const cleanUrl = cleanYouTubeUrl(rawUrl);
+  console.log(`Capturing: ${rawUrl} → cleaned: ${cleanUrl}`);
+
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ytcap-'));
-  const videoPath = path.join(tmpDir, 'clip.mp4');
+  const videoPath = path.join(tmpDir, 'clip.%(ext)s');
   const outPath = path.join(tmpDir, 'frame.png');
   try {
-    // Download only seconds 4-8 directly (yt-dlp handles auth internally)
-    // Try ios client first, fall back to web
-    const clients = ['ios', 'android', 'web'];
-    let downloaded = false;
-
-    // Write cookies to tmp file if available
     if (cookiesContent) {
       await writeFile(COOKIES_PATH, cookiesContent, 'utf8');
     }
 
+    const clients = ['ios', 'android,web', 'tv_embedded', 'web'];
+    let downloaded = false;
+    let lastError = '';
+
     for (const client of clients) {
       try {
         const args = [
-          '-f', 'best[ext=mp4]/best',
+          '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
           '--no-playlist',
           '--extractor-args', `youtube:player_client=${client}`,
-          '--download-sections', '*4-8',
+          '--download-sections', '*4-9',
           '--force-keyframes-at-cuts',
           '-o', videoPath,
           '--no-warnings',
+          '--no-part',
         ];
         if (cookiesContent) args.push('--cookies', COOKIES_PATH);
-        args.push(url);
+        args.push(cleanUrl);
 
-        await execFileAsync('yt-dlp', args, { timeout: 60000 });
+        const { stderr } = await execFileAsync('yt-dlp', args, {
+          timeout: 90000,
+          encoding: 'utf8',
+        }).catch(e => { throw new Error(e.stderr || e.message); });
+
         downloaded = true;
+        console.log(`Success with client: ${client}`);
         break;
       } catch (e) {
-        console.log(`Client ${client} failed, trying next...`);
+        lastError = e.message;
+        console.log(`Client ${client} failed: ${e.message.slice(0, 200)}`);
       }
     }
 
-    if (!downloaded) throw new Error('ไม่สามารถดาวน์โหลดวิดีโอได้ (YouTube บล็อก) กรุณาลองอีกครั้งในภายหลัง');
+    if (!downloaded) {
+      // Show meaningful error
+      const msg = lastError.includes('Sign in') || lastError.includes('bot')
+        ? 'YouTube ต้องการ login — cookies อาจหมดอายุ กรุณาอัปโหลด cookies.txt ใหม่'
+        : lastError.includes('not available') || lastError.includes('private')
+        ? 'วิดีโอนี้ไม่สามารถดาวน์โหลดได้ (private/ถูกลบ)'
+        : `yt-dlp error: ${lastError.slice(0, 300)}`;
+      throw new Error(msg);
+    }
 
-    // Extract frame at ~1s into the clip (= second 5 of original)
+    // Find the downloaded file (extension may vary)
+    const { readdir } = require('fs/promises');
+    const files = await readdir(tmpDir);
+    const videoFile = files.find(f => f.startsWith('clip.') && f !== 'frame.png');
+    if (!videoFile) throw new Error('ไม่พบไฟล์วิดีโอที่ดาวน์โหลด');
+
+    // Extract frame at 1s into clip (= ~second 5 of original)
     await execFileAsync('ffmpeg', [
-      '-i', videoPath,
+      '-i', path.join(tmpDir, videoFile),
       '-ss', '1',
       '-vframes', '1',
       '-vf', 'scale=640:480:force_original_aspect_ratio=decrease,pad=640:480:(ow-iw)/2:(oh-ih)/2:black',
-      '-y',
-      outPath,
+      '-y', outPath,
     ], { timeout: 30000 });
 
     const data = await readFile(outPath);
     return { success: true, data };
   } catch (err) {
+    console.error('captureFrame error:', err.message);
     return { success: false, error: err.message };
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
   }
+}
+
+// Clean YouTube URL — strip all params except v=
+function cleanYouTubeUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'youtu.be') {
+      return `https://youtu.be${u.pathname}`;
+    }
+    const v = u.searchParams.get('v');
+    if (v) return `https://www.youtube.com/watch?v=${v}`;
+    return url;
+  } catch { return url; }
 }
 
 // Batch capture → PowerPoint
