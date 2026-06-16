@@ -139,7 +139,7 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
       <b>วิธีใช้งาน My Browser Capture:</b><br>
       1️⃣ เลือกไฟล์ Excel → กด <b>โหลดรายการ</b> (สูงสุด 10 รายการ)<br>
       2️⃣ ตั้งเวลารอต่อ URL → กด <b>เริ่ม Capture</b><br>
-      3️⃣ Tab ใหม่ <b>"Ads Capture Display"</b> เปิดขึ้น → เมื่อถูกถามให้แชร์ เลือก <b>Chrome Tab → Ads Capture Display → Share</b><br>
+      3️⃣ หน้าต่าง <b>"Ads Capture Display"</b> เปิดขึ้น → เมื่อถูกถามให้แชร์ เลือก <b>Window → Ads Capture Display → Share</b><br>
       4️⃣ กลับมา tab นี้ ระบบแคปให้อัตโนมัติ → ดาวน์โหลด PPTX
     </div>
 
@@ -177,7 +177,7 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
     </div>
     <div class="step" id="s2">
       <div class="step-icon">2️⃣</div>
-      <div class="step-text">เปิด tab แสดงผล → เลือก "Chrome Tab" → "Ads Capture Display" → Share<div class="step-sub" id="s2sub"></div></div>
+      <div class="step-text">เปิดหน้าต่างแสดงผล → เลือก <b>"Window"</b> → "Ads Capture Display" → Share<div class="step-sub" id="s2sub"></div></div>
     </div>
     <div class="step" id="s3">
       <div class="step-icon">3️⃣</div>
@@ -340,31 +340,34 @@ async function startClientCapture() {
   document.getElementById('steps').style.display = 'flex';
   ['s1','s2','s3','s4'].forEach((id, i) => stepReset(id, (i+1)+'️⃣', id === 's3' ? 'รอเริ่ม...' : ''));
 
+  const sw = screen.width, sh = screen.height;
+  const pw = Math.min(1280, sw - 100), ph = Math.min(720, sh - 100);
+
   try {
     stepDone('s1', `${ads.length} รายการ (พร้อม)`);
 
-    // ── STEP 2: Open display TAB + request screen share ─────────────────────
-    stepActive('s2', 'กำลังเปิด tab แสดงผล...');
+    // ── STEP 2: Open display POPUP WINDOW + request screen share ────────────
+    // ใช้ Popup Window แทน Tab เพราะ "Window" capture ใน getDisplayMedia
+    // ตามการ navigate ข้าม origin ได้ (Chrome Tab capture หยุดเมื่อข้าม origin)
+    stepActive('s2', 'กำลังเปิดหน้าต่างแสดงผล...');
 
-    // เปิดเป็น Chrome Tab (ไม่ใส่ features = tab) เพื่อให้ user เลือกใน "Chrome Tab" picker
-    displayWin = window.open('/display.html', 'AdsDisplay');
+    displayWin = window.open('/display.html', 'AdsDisplay',
+      `width=${pw},height=${ph},left=${Math.round((sw-pw)/2)},top=${Math.round((sh-ph)/2)},toolbar=no,menubar=no,scrollbars=no`);
     if (!displayWin) {
-      stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup/tab แล้วลองใหม่');
+      stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup ที่ address bar แล้วลองใหม่');
       return resetClientUI();
     }
 
-    // รอให้ tab เปิดก่อน แล้วค่อยแสดง share dialog
-    await sleep(1200);
+    await sleep(1000);
 
-    stepActive('s2', '🔴 กรุณาเลือก "Chrome Tab" → "Ads Capture Display" → กด Share');
+    stepActive('s2', '🔴 เลือก "Window" → "Ads Capture Display" → กด Share');
     try {
       captureStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 2, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { frameRate: 2, width: { ideal: pw }, height: { ideal: ph } },
         audio: false,
-        // preferCurrentTab: false เพื่อให้ user เลือก tab แสดงผลได้
       });
     } catch (err) {
-      stepError('s2', 'ยกเลิกการแชร์ — กรุณาลองใหม่ แล้วเลือก "Chrome Tab" → "Ads Capture Display"');
+      stepError('s2', 'ยกเลิกการแชร์ — ลองใหม่ แล้วเลือก "Window" → "Ads Capture Display"');
       if (displayWin) { displayWin.close(); displayWin = null; }
       return resetClientUI();
     }
@@ -407,15 +410,15 @@ async function startClientCapture() {
       document.getElementById('s3sub').textContent =
         `(${i + 1}/${ads.length}) เปิด: ${ad.name} (รอ ${waitSec}s)`;
 
-      // Navigate ผ่าน relay /display.html?goto=URL (same-origin) → display.html redirect ไป ad URL
-      // วิธีนี้แก้ปัญหา Chrome block cross-origin navigation บน tab ที่ถูก capture
-      const relayUrl = '/display.html?goto=' + encodeURIComponent(ad.url);
+      // Popup window รองรับ cross-origin navigation ได้โดยตรง
       try {
-        displayWin.location.href = relayUrl;
+        displayWin.location.href = ad.url;
+        displayWin.focus();
       } catch (_) {
-        displayWin = window.open(relayUrl, 'AdsDisplay');
+        // popup ถูกปิด → เปิดใหม่
+        displayWin = window.open(ad.url, 'AdsDisplay',
+          `width=${pw},height=${ph},left=${Math.round((sw-pw)/2)},top=${Math.round((sh-ph)/2)},toolbar=no,menubar=no`);
       }
-      await sleep(700); // รอ relay redirect เสร็จก่อน
 
       // Phase 1: รอโหลดหน้า
       for (let t = 0; t < loadWait; t += 500) {
