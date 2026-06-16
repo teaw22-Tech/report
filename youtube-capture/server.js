@@ -190,32 +190,162 @@ app.post('/build-pptx', async (req, res) => {
 
   try {
     const pptx = new PptxGenJS();
-    pptx.layout = 'LAYOUT_16x9';
+    pptx.layout = 'LAYOUT_16x9'; // 10" × 5.625"
+
+    const W = 10, H = 5.625;
+    const now = new Date().toLocaleDateString('th-TH', {
+      day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+
+    // ── Cover slide ──────────────────────────────────────────
+    const cover = pptx.addSlide();
+    cover.background = { color: '0A0A1E' };
+
+    // Decorative top bar
+    cover.addShape(pptx.ShapeType.rect, {
+      x: 0, y: 0, w: W, h: 0.06, fill: { color: '4682E6' },
+    });
+
+    // Title
+    cover.addText('AD CAPTURE REPORT', {
+      x: 0.5, y: 1.6, w: W - 1, h: 0.9,
+      fontSize: 36, bold: true, color: '4682E6', align: 'center',
+    });
+
+    // Divider line
+    cover.addShape(pptx.ShapeType.rect, {
+      x: 2.5, y: 2.65, w: 5, h: 0.03, fill: { color: '4682E6' }, line: { color: '4682E6' },
+    });
+
+    // Subtitle
+    cover.addText(`Total Ads Captured: ${items.length}`, {
+      x: 0.5, y: 2.85, w: W - 1, h: 0.45,
+      fontSize: 18, color: 'B4C8FF', align: 'center',
+    });
+
+    // Date
+    cover.addText(`Generated: ${now}`, {
+      x: 0.5, y: 3.45, w: W - 1, h: 0.35,
+      fontSize: 12, color: '788CB4', align: 'center',
+    });
+
+    // Footer
+    cover.addText('YouTube Ad Capture System  •  Confidential', {
+      x: 0, y: H - 0.3, w: W, h: 0.28,
+      fontSize: 8, color: '2A3450', align: 'center',
+    });
+
+    // ── Content slides ────────────────────────────────────────
+    // Layout (10" × 5.625"):
+    // Header bar: full width, h=0.6"
+    // Left image area: x=0.2, y=0.72, w=6.4, h=4.3
+    // Right panel: x=6.8, y=0.72, w=3.0, h=4.3
+    // Footer: y=5.3
+
+    const HDR_H = 0.6;
+    const IMG_X = 0.2, IMG_Y = 0.72, IMG_W = 6.4, IMG_H = 4.28;
+    const RX = 6.8, RY = 0.72, RW = 3.0;
 
     for (let i = 0; i < items.length; i++) {
       const { url, name, image, error } = items[i];
       const slide = pptx.addSlide();
-      slide.background = { color: '000000' };
+      slide.background = { color: '080819' };
+
+      // ── Header bar ──
+      slide.addShape(pptx.ShapeType.rect, {
+        x: 0, y: 0, w: W, h: HDR_H,
+        fill: { color: '14285A' },
+        line: { color: '4682E6', pt: 1.5 },
+      });
+
+      // Slide number badge
+      slide.addText(`#${String(i + 1).padStart(2, '0')}`, {
+        x: 0.1, y: 0.05, w: 0.9, h: HDR_H - 0.1,
+        fontSize: 20, bold: true, color: '4682E6', valign: 'middle', align: 'center',
+      });
+
+      // Ad name in header
+      slide.addText(name || `Ad ${i + 1}`, {
+        x: 1.1, y: 0.08, w: W - 1.3, h: HDR_H - 0.16,
+        fontSize: 14, bold: true, color: 'DCEBFF', valign: 'middle',
+      });
+
+      // ── Screenshot box ──
+      // Outer frame
+      slide.addShape(pptx.ShapeType.rect, {
+        x: IMG_X - 0.04, y: IMG_Y - 0.04,
+        w: IMG_W + 0.08, h: IMG_H + 0.08,
+        fill: { color: '14285A' },
+        line: { color: '4682E6', pt: 1.5 },
+      });
 
       if (image) {
-        slide.addImage({ data: `image/png;base64,${image}`, x: 0, y: 0, w: '100%', h: '100%' });
-        if (name) {
-          slide.addText(name, {
-            x: 0.15, y: 0.12, w: 9, h: 0.4,
-            fontSize: 13, bold: true, color: 'ffffff',
-            shadow: { type: 'outer', blur: 4, offset: 1, color: '000000' },
-          });
-        }
-        slide.addText(`${i + 1}. ${name || url}`, {
-          x: 0.1, y: 6.75, w: 9.8, h: 0.3,
-          fontSize: 8, color: 'ffffff', transparency: 45,
+        slide.addImage({
+          data: `image/png;base64,${image}`,
+          x: IMG_X, y: IMG_Y, w: IMG_W, h: IMG_H,
+          sizing: { type: 'contain', x: IMG_X, y: IMG_Y, w: IMG_W, h: IMG_H },
         });
       } else {
-        slide.addText(
-          `❌ Slide ${i + 1}${name ? ' — ' + name : ''}\n${error || 'capture failed'}\n\n${url}`,
-          { x: 0.5, y: 2.2, w: 9, h: 2.5, fontSize: 13, color: 'ff6b6b', align: 'center', breakLine: true }
-        );
+        slide.addText(`❌\n${error || 'capture failed'}`, {
+          x: IMG_X, y: IMG_Y, w: IMG_W, h: IMG_H,
+          fontSize: 12, color: 'f87171', align: 'center', valign: 'middle', breakLine: true,
+        });
       }
+
+      // ── Right panel ──
+      // Section divider
+      slide.addShape(pptx.ShapeType.rect, {
+        x: RX - 0.04, y: IMG_Y - 0.04,
+        w: RW + 0.04, h: IMG_H + 0.08,
+        fill: { color: '0D1530' },
+        line: { color: '1E3060', pt: 1 },
+      });
+
+      // "● AD NAME" label
+      slide.addText('● AD NAME', {
+        x: RX + 0.12, y: RY + 0.1, w: RW - 0.2, h: 0.28,
+        fontSize: 8, bold: true, color: 'C85032',
+      });
+      slide.addText(name || '—', {
+        x: RX + 0.12, y: RY + 0.38, w: RW - 0.2, h: 0.5,
+        fontSize: 11, bold: true, color: 'FFFFFF',
+        wrap: true,
+      });
+
+      // Divider
+      slide.addShape(pptx.ShapeType.rect, {
+        x: RX + 0.1, y: RY + 1.0, w: RW - 0.2, h: 0.02,
+        fill: { color: '1E3060' }, line: { color: '1E3060' },
+      });
+
+      // "AD URL" label
+      slide.addText('● AD URL', {
+        x: RX + 0.12, y: RY + 1.1, w: RW - 0.2, h: 0.28,
+        fontSize: 8, bold: true, color: '648CDC',
+      });
+      slide.addText(url, {
+        x: RX + 0.12, y: RY + 1.38, w: RW - 0.2, h: 1.5,
+        fontSize: 7, color: '96B4E6',
+        wrap: true, hyperlink: { url },
+      });
+
+      // Divider
+      slide.addShape(pptx.ShapeType.rect, {
+        x: RX + 0.1, y: RY + 3.0, w: RW - 0.2, h: 0.02,
+        fill: { color: '1E3060' }, line: { color: '1E3060' },
+      });
+
+      // "Ad X of Y" counter
+      slide.addText(`Ad ${i + 1} of ${items.length}`, {
+        x: RX + 0.12, y: RY + 3.1, w: RW - 0.2, h: 0.35,
+        fontSize: 10, color: '50648C',
+      });
+
+      // Footer
+      slide.addText('YouTube Ad Capture System  •  Confidential', {
+        x: 0, y: H - 0.3, w: W, h: 0.28,
+        fontSize: 7, color: '323C5A', align: 'center',
+      });
     }
 
     const buf = await pptx.write({ outputType: 'nodebuffer' });
@@ -223,6 +353,7 @@ app.post('/build-pptx', async (req, res) => {
     res.set('Content-Disposition', 'attachment; filename="youtube-captures.pptx"');
     res.send(buf);
   } catch (err) {
+    console.error('build-pptx error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
