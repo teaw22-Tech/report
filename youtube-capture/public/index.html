@@ -74,6 +74,23 @@ input[type="text"]::placeholder { color: #333; }
 .btn-export { background: #ff0000; color: #fff; }
 .btn-export:hover:not(:disabled) { opacity: .88; }
 
+/* Excel import */
+.excel-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: #111; border: 1px dashed #2a2a2a; border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 12px;
+}
+.excel-bar-label { font-size: 12px; color: #666; flex: 1; }
+.excel-btn {
+  background: none; border: 1px solid #2a2a2a; border-radius: 7px;
+  color: #aaa; font-size: 12px; padding: 6px 12px; cursor: pointer;
+  white-space: nowrap; transition: all .15s; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.excel-btn:hover { border-color: #4ade80; color: #4ade80; }
+.excel-btn.upload:hover { border-color: #60a5fa; color: #60a5fa; }
+.excel-limit { font-size: 11px; color: #444; margin-top: 2px; }
+
 .error-box {
   background: rgba(255,60,60,.08); border: 1px solid rgba(255,60,60,.3);
   border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #f87171;
@@ -152,9 +169,24 @@ input[type="text"]::placeholder { color: #333; }
       <span>Screenshot at second 5 → PowerPoint</span>
     </div>
   </div>
-  <div class="badge"><div class="dot"></div> 1280×720 · วินาทีที่ 5 · ส่งออก .pptx</div>
+  <div class="badge"><div class="dot"></div> 640×480 · วินาทีที่ 5 · ส่งออก .pptx</div>
 
-  <label>YouTube URLs (สูงสุด 10 รายการ)</label>
+  <!-- Excel import bar -->
+  <div class="excel-bar">
+    <div>
+      <div class="excel-bar-label">📋 กรอก URL ผ่านไฟล์ Excel</div>
+      <div class="excel-limit">ลิมิต 10 ภาพ / ไฟล์</div>
+    </div>
+    <a class="excel-btn" href="/template" download="youtube-capture-template.xlsx">
+      ⬇ ดาวน์โหลด Template
+    </a>
+    <button class="excel-btn upload" onclick="document.getElementById('excel-input').click()">
+      📂 อัปโหลด Excel
+    </button>
+    <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)">
+  </div>
+
+  <label>หรือพิมพ์ URL ด้านล่าง (สูงสุด 10 รายการ)</label>
   <div class="url-list" id="url-list"></div>
   <button class="add-btn" id="add-btn" onclick="addRow()">+ เพิ่ม URL</button>
 
@@ -400,6 +432,45 @@ function showError(msg) {
 }
 function hideError() {
   document.getElementById('error-box').style.display = 'none';
+}
+
+// ── Import Excel ──────────────────────────────────────────────
+async function importExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res = await fetch('/parse-excel', { method: 'POST', body: fd });
+    const json = await res.json();
+    if (!res.ok || json.error) { showError(json.error || 'อ่านไฟล์ไม่ได้'); return; }
+
+    const { urls } = json;
+    if (urls.length > 10) { showError('ไฟล์มี URL เกิน 10 รายการ'); return; }
+
+    // Replace rows with imported URLs
+    rows = urls.map((url, i) => ({ id: Date.now() + i, value: url }));
+    // Pad to at least 3 rows
+    while (rows.length < 3) rows.push({ id: Date.now() + rows.length + 100, value: '' });
+    renderRows();
+    // Populate inputs
+    setTimeout(() => {
+      document.querySelectorAll('.url-input').forEach((inp, i) => {
+        if (urls[i]) { inp.value = urls[i]; inp.closest('.url-row').classList.add('has-value'); }
+      });
+    }, 50);
+
+    hideError();
+    captured = [];
+    document.getElementById('export-btn').disabled = true;
+    document.getElementById('export-area').style.display = 'none';
+    document.getElementById('preview-section').style.display = 'none';
+  } catch (err) {
+    showError('อ่านไฟล์ไม่ได้: ' + err.message);
+  }
 }
 
 // Init

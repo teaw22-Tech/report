@@ -4,6 +4,8 @@ const { promisify } = require('util');
 const { mkdtemp, readFile, rm } = require('fs/promises');
 const path = require('path');
 const os = require('os');
+const multer = require('multer');
+const XLSX = require('xlsx');
 const PptxGenJS = require('pptxgenjs');
 
 const execFileAsync = promisify(execFile);
@@ -13,7 +15,65 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 let isProcessing = false;
+
+// Download Excel template
+app.get('/template', (req, res) => {
+  const wb = XLSX.utils.book_new();
+  const data = [
+    ['#', 'YouTube URL', 'หมายเหตุ'],
+    [1, '', ''],
+    [2, '', ''],
+    [3, '', ''],
+    [4, '', ''],
+    [5, '', ''],
+    [6, '', ''],
+    [7, '', ''],
+    [8, '', ''],
+    [9, '', ''],
+    [10, '', ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Column widths
+  ws['!cols'] = [{ wch: 4 }, { wch: 55 }, { wch: 20 }];
+
+  // Style header row (xlsx community edition has limited styling — set bold via format)
+  ws['A1'].v = '#';
+  ws['B1'].v = 'YouTube URL';
+  ws['C1'].v = 'หมายเหตุ';
+
+  XLSX.utils.book_append_sheet(wb, ws, 'YouTube URLs');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.set('Content-Disposition', 'attachment; filename="youtube-capture-template.xlsx"');
+  res.send(buf);
+});
+
+// Upload Excel → parse URLs
+app.post('/parse-excel', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'ไม่พบไฟล์ที่อัปโหลด' });
+
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Skip header row, read column B (index 1), filter valid YouTube URLs
+    const urls = rows.slice(1)
+      .map(r => String(r[1] || '').trim())
+      .filter(u => u && isYouTubeUrl(u))
+      .slice(0, 10); // hard limit 10
+
+    if (urls.length === 0) return res.status(400).json({ error: 'ไม่พบ YouTube URL ในไฟล์ (คอลัมน์ B)' });
+
+    res.json({ urls });
+  } catch (err) {
+    res.status(400).json({ error: 'อ่านไฟล์ไม่ได้: ' + err.message });
+  }
+});
 
 // Capture a single frame at second 5 using yt-dlp + ffmpeg
 async function captureFrame(url) {
@@ -36,7 +96,7 @@ async function captureFrame(url) {
       '-ss', '5',
       '-i', streamUrl,
       '-vframes', '1',
-      '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black',
+      '-vf', 'scale=640:480:force_original_aspect_ratio=decrease,pad=640:480:(ow-iw)/2:(oh-ih)/2:black',
       '-y',
       outPath,
     ], { timeout: 60000 });
