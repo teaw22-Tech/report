@@ -22,7 +22,7 @@ let isProcessing = false;
 app.get('/template', (req, res) => {
   const wb = XLSX.utils.book_new();
   const data = [
-    ['#', 'YouTube URL', 'หมายเหตุ'],
+    ['#', 'Name', 'YouTube URL'],
     [1, '', ''],
     [2, '', ''],
     [3, '', ''],
@@ -36,13 +36,10 @@ app.get('/template', (req, res) => {
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
 
-  // Column widths
-  ws['!cols'] = [{ wch: 4 }, { wch: 55 }, { wch: 20 }];
-
-  // Style header row (xlsx community edition has limited styling — set bold via format)
+  ws['!cols'] = [{ wch: 4 }, { wch: 30 }, { wch: 55 }];
   ws['A1'].v = '#';
-  ws['B1'].v = 'YouTube URL';
-  ws['C1'].v = 'หมายเหตุ';
+  ws['B1'].v = 'Name';
+  ws['C1'].v = 'YouTube URL';
 
   XLSX.utils.book_append_sheet(wb, ws, 'YouTube URLs');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -61,15 +58,15 @@ app.post('/parse-excel', upload.single('file'), (req, res) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-    // Skip header row, read column B (index 1), filter valid YouTube URLs
-    const urls = rows.slice(1)
-      .map(r => String(r[1] || '').trim())
-      .filter(u => u && isYouTubeUrl(u))
-      .slice(0, 10); // hard limit 10
+    // Skip header row: col B = Name (index 1), col C = URL (index 2)
+    const items = rows.slice(1)
+      .map(r => ({ name: String(r[1] || '').trim(), url: String(r[2] || '').trim() }))
+      .filter(r => r.url && isYouTubeUrl(r.url))
+      .slice(0, 10);
 
-    if (urls.length === 0) return res.status(400).json({ error: 'ไม่พบ YouTube URL ในไฟล์ (คอลัมน์ B)' });
+    if (items.length === 0) return res.status(400).json({ error: 'ไม่พบ YouTube URL ในไฟล์ (คอลัมน์ C)' });
 
-    res.json({ urls });
+    res.json({ items });
   } catch (err) {
     res.status(400).json({ error: 'อ่านไฟล์ไม่ได้: ' + err.message });
   }
@@ -80,11 +77,13 @@ async function captureFrame(url) {
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ytcap-'));
   const outPath = path.join(tmpDir, 'frame.png');
   try {
-    // Step 1: get direct video stream URL from yt-dlp
+    // Step 1: get direct video stream URL via Android client (bypasses bot detection)
     const { stdout } = await execFileAsync('yt-dlp', [
       '--get-url',
       '-f', 'best[ext=mp4]/best',
       '--no-playlist',
+      '--extractor-args', 'youtube:player_client=android',
+      '--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
       url,
     ], { timeout: 30000 });
 
@@ -204,18 +203,28 @@ app.post('/build-pptx', async (req, res) => {
     pptx.layout = 'LAYOUT_16x9';
 
     for (let i = 0; i < items.length; i++) {
-      const { url, image, error } = items[i];
+      const { url, name, image, error } = items[i];
+      const label = name ? `${i + 1}. ${name}` : `${i + 1}. ${url}`;
       const slide = pptx.addSlide();
       slide.background = { color: '000000' };
 
       if (image) {
         slide.addImage({ data: `image/png;base64,${image}`, x: 0, y: 0, w: '100%', h: '100%' });
-        slide.addText(`${i + 1}. ${url}`, {
-          x: 0.1, y: 6.8, w: 9.8, h: 0.3,
-          fontSize: 8, color: 'ffffff', transparency: 50,
+        // Name label top-left
+        if (name) {
+          slide.addText(name, {
+            x: 0.15, y: 0.12, w: 9, h: 0.4,
+            fontSize: 13, bold: true, color: 'ffffff',
+            shadow: { type: 'outer', blur: 4, offset: 1, color: '000000' },
+          });
+        }
+        // URL label bottom
+        slide.addText(label, {
+          x: 0.1, y: 6.75, w: 9.8, h: 0.3,
+          fontSize: 8, color: 'ffffff', transparency: 45,
         });
       } else {
-        slide.addText(`❌ Slide ${i + 1}\n${error || 'capture failed'}\n\n${url}`, {
+        slide.addText(`❌ Slide ${i + 1}${name ? ' — ' + name : ''}\n${error || 'capture failed'}\n\n${url}`, {
           x: 0.5, y: 2.2, w: 9, h: 2.5,
           fontSize: 13, color: 'ff6b6b', align: 'center', breakLine: true,
         });

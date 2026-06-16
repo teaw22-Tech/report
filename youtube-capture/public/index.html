@@ -34,20 +34,23 @@ body {
 label { display: block; font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
 .url-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
 .url-row { display: flex; align-items: center; gap: 8px; }
+.url-row-inputs { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .url-num {
   min-width: 22px; height: 22px; border-radius: 50%;
   background: #2a2a2a; color: #666; font-size: 11px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  transition: all .2s;
+  transition: all .2s; align-self: flex-start; margin-top: 10px;
 }
 .url-row.has-value .url-num { background: #ff0000; color: #fff; }
 input[type="text"] {
-  flex: 1; background: #111; border: 1px solid #2a2a2a;
-  border-radius: 8px; padding: 9px 12px; color: #e8e8e8; font-size: 13px;
+  width: 100%; background: #111; border: 1px solid #2a2a2a;
+  border-radius: 8px; padding: 8px 12px; color: #e8e8e8; font-size: 13px;
   outline: none; transition: border-color .15s;
 }
 input[type="text"]:focus { border-color: #ff4444; }
 input[type="text"]::placeholder { color: #333; }
+input.name-input { font-size: 12px; padding: 6px 12px; }
+input.name-input::placeholder { color: #2a2a2a; font-style: italic; }
 .remove-btn {
   background: none; border: none; color: #333; cursor: pointer;
   font-size: 18px; padding: 4px; line-height: 1; transition: color .15s;
@@ -222,14 +225,14 @@ input[type="text"]::placeholder { color: #333; }
 <script>
 const MAX = 10;
 let rows = [];
-// Store captured images: { url, image: base64|null, error: str|null }
+// { url, name, image: base64|null, error: str|null }
 let captured = [];
 
 // ── URL Rows ──────────────────────────────────────────────────
-function addRow(value = '') {
+function addRow(url = '', name = '') {
   if (rows.length >= MAX) return;
   const id = Date.now() + Math.random();
-  rows.push({ id, value });
+  rows.push({ id, url, name });
   renderRows();
   setTimeout(() => {
     const inputs = document.querySelectorAll('.url-input');
@@ -245,19 +248,29 @@ function removeRow(id) {
 
 function renderRows() {
   const list = document.getElementById('url-list');
-  const existing = {};
-  list.querySelectorAll('input').forEach(inp => { existing[inp.dataset.id] = inp.value; });
+  // Preserve existing values
+  const vals = {};
+  list.querySelectorAll('[data-id]').forEach(el => {
+    const id = el.dataset.id, type = el.dataset.type;
+    vals[`${id}_${type}`] = el.value;
+  });
 
   list.innerHTML = rows.map((r, i) => {
-    const val = existing[r.id] !== undefined ? existing[r.id] : r.value;
+    const url = vals[`${r.id}_url`] !== undefined ? vals[`${r.id}_url`] : r.url;
+    const name = vals[`${r.id}_name`] !== undefined ? vals[`${r.id}_name`] : r.name;
     return `
-    <div class="url-row${val ? ' has-value' : ''}" id="row-${r.id}">
+    <div class="url-row${url ? ' has-value' : ''}" id="row-${r.id}">
       <div class="url-num">${i + 1}</div>
-      <input type="text" class="url-input" data-id="${r.id}"
-        placeholder="https://www.youtube.com/watch?v=..."
-        value="${esc(val)}"
-        oninput="onInput(this)"
-        onkeydown="onKey(event,${i})">
+      <div class="url-row-inputs">
+        <input type="text" class="name-input" data-id="${r.id}" data-type="name"
+          placeholder="ชื่อ (แสดงใน PowerPoint)"
+          value="${esc(name)}" oninput="resetExport()">
+        <input type="text" class="url-input" data-id="${r.id}" data-type="url"
+          placeholder="https://www.youtube.com/watch?v=..."
+          value="${esc(url)}"
+          oninput="onInput(this)"
+          onkeydown="onKey(event,${i})">
+      </div>
       ${rows.length > 1 ? `<button class="remove-btn" onclick="removeRow(${r.id})" title="ลบ">×</button>` : ''}
     </div>`;
   }).join('');
@@ -269,7 +282,10 @@ function renderRows() {
 
 function onInput(inp) {
   inp.closest('.url-row').classList.toggle('has-value', !!inp.value.trim());
-  // Reset export if URLs change
+  resetExport();
+}
+
+function resetExport() {
   captured = [];
   document.getElementById('export-btn').disabled = true;
   document.getElementById('export-area').style.display = 'none';
@@ -282,32 +298,34 @@ function onKey(e, idx) {
   else if (rows.length < MAX) addRow();
 }
 
-function getUrls() {
-  return [...document.querySelectorAll('.url-input')].map(i => i.value.trim()).filter(Boolean);
+function getItems() {
+  return [...document.querySelectorAll('.url-row')].map(row => ({
+    url: row.querySelector('.url-input')?.value.trim() || '',
+    name: row.querySelector('.name-input')?.value.trim() || '',
+  })).filter(r => r.url);
 }
 
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
 // ── Preview ───────────────────────────────────────────────────
 async function startPreview() {
-  const urls = getUrls();
-  if (!urls.length) { showError('กรุณาใส่ URL อย่างน้อย 1 รายการ'); return; }
+  const items = getItems();
+  if (!items.length) { showError('กรุณาใส่ URL อย่างน้อย 1 รายการ'); return; }
 
   hideError();
-  captured = urls.map(url => ({ url, image: null, error: null }));
+  captured = items.map(({ url, name }) => ({ url, name, image: null, error: null }));
 
   document.getElementById('export-btn').disabled = true;
   document.getElementById('export-area').style.display = 'none';
   document.getElementById('preview-btn').disabled = true;
   document.getElementById('preview-btn').textContent = '⏳ กำลัง Preview...';
 
-  // Build grid with loading placeholders
   const grid = document.getElementById('preview-grid');
-  grid.innerHTML = urls.map((url, i) => `
+  grid.innerHTML = items.map(({ url, name }, i) => `
     <div class="preview-item" id="pi-${i}">
       <div class="preview-item-header">
         <div class="pi-num">${i+1}</div>
-        <div class="pi-url" title="${esc(url)}">${url}</div>
+        <div class="pi-url" title="${esc(url)}">${name ? `<strong>${esc(name)}</strong> · ` : ''}${url}</div>
         <span class="pi-status-icon" id="pi-icon-${i}">⏳</span>
       </div>
       <div class="preview-img-wrap" id="pi-wrap-${i}">
@@ -320,21 +338,18 @@ async function startPreview() {
     </div>`).join('');
 
   document.getElementById('preview-section').style.display = 'block';
-  document.getElementById('preview-count').textContent = `0 / ${urls.length} เสร็จแล้ว`;
+  document.getElementById('preview-count').textContent = `0 / ${items.length} เสร็จแล้ว`;
 
   let done = 0;
-  // Capture sequentially (free tier: 1 at a time)
-  for (let i = 0; i < urls.length; i++) {
-    await captureOne(i, urls[i]);
+  for (let i = 0; i < items.length; i++) {
+    await captureOne(i, items[i].url);
     done++;
-    document.getElementById('preview-count').textContent = `${done} / ${urls.length} เสร็จแล้ว`;
+    document.getElementById('preview-count').textContent = `${done} / ${items.length} เสร็จแล้ว`;
   }
 
   document.getElementById('preview-btn').disabled = false;
   document.getElementById('preview-btn').textContent = '🔍 Preview ทั้งหมด';
-
-  const hasAny = captured.some(c => c.image);
-  document.getElementById('export-btn').disabled = !hasAny;
+  document.getElementById('export-btn').disabled = !captured.some(c => c.image);
 }
 
 async function captureOne(i, url) {
@@ -448,25 +463,14 @@ async function importExcel(input) {
     const json = await res.json();
     if (!res.ok || json.error) { showError(json.error || 'อ่านไฟล์ไม่ได้'); return; }
 
-    const { urls } = json;
-    if (urls.length > 10) { showError('ไฟล์มี URL เกิน 10 รายการ'); return; }
-
-    // Replace rows with imported URLs
-    rows = urls.map((url, i) => ({ id: Date.now() + i, value: url }));
-    // Pad to at least 3 rows
-    while (rows.length < 3) rows.push({ id: Date.now() + rows.length + 100, value: '' });
+    const { items } = json;
+    // Replace rows with imported items
+    rows = items.map((item, i) => ({ id: Date.now() + i, url: item.url, name: item.name || '' }));
+    while (rows.length < 3) rows.push({ id: Date.now() + rows.length + 100, url: '', name: '' });
     renderRows();
-    // Populate inputs
-    setTimeout(() => {
-      document.querySelectorAll('.url-input').forEach((inp, i) => {
-        if (urls[i]) { inp.value = urls[i]; inp.closest('.url-row').classList.add('has-value'); }
-      });
-    }, 50);
 
     hideError();
-    captured = [];
-    document.getElementById('export-btn').disabled = true;
-    document.getElementById('export-area').style.display = 'none';
+    resetExport();
     document.getElementById('preview-section').style.display = 'none';
   } catch (err) {
     showError('อ่านไฟล์ไม่ได้: ' + err.message);
