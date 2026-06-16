@@ -158,9 +158,63 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
     });
     page = await context.newPage();
 
-    // ลด signal ที่ทำให้ YouTube ตรวจจับว่าเป็น headless browser แล้วขึ้น "Sign in to confirm you're not a bot"
+    // ซ่อน signal ที่ YouTube/เว็บอื่นใช้ตรวจจับ headless/automation browser
     await page.addInitScript(() => {
+      // 1. ซ่อน webdriver flag
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+
+      // 2. จำลอง chrome object ให้เหมือน browser จริง
+      if (!window.chrome) {
+        window.chrome = {
+          app: { isInstalled: false, InstallState: {}, RunningState: {} },
+          runtime: {
+            PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' },
+            PlatformArch: { ARM: 'arm', X86_32: 'x86-32', X86_64: 'x86-64' },
+            RequestUpdateCheckStatus: { THROTTLED: 'throttled', NO_UPDATE: 'no_update', UPDATE_AVAILABLE: 'update_available' },
+            OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update', SHARED_MODULE_UPDATE: 'shared_module_update' },
+            OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
+          },
+        };
+      }
+
+      // 3. จำลอง plugins ให้ไม่ว่างเปล่า (headless มักมี plugins = 0)
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+          const makePlugin = (name, filename, desc, mimeType) => {
+            const plugin = Object.create(Plugin.prototype);
+            Object.defineProperty(plugin, 'name', { get: () => name });
+            Object.defineProperty(plugin, 'filename', { get: () => filename });
+            Object.defineProperty(plugin, 'description', { get: () => desc });
+            Object.defineProperty(plugin, 'length', { get: () => 1 });
+            const mime = Object.create(MimeType.prototype);
+            Object.defineProperty(mime, 'type', { get: () => mimeType });
+            plugin[0] = mime;
+            return plugin;
+          };
+          const arr = [
+            makePlugin('Chrome PDF Plugin', 'internal-pdf-viewer', 'Portable Document Format', 'application/x-google-chrome-pdf'),
+            makePlugin('Chrome PDF Viewer', 'mhjfbmdgcfjbbpaeojofohoefgiehjai', '', 'application/pdf'),
+            makePlugin('Native Client', 'internal-nacl-plugin', '', 'application/x-nacl'),
+          ];
+          Object.defineProperty(arr, 'namedItem', { value: (n) => arr.find(p => p.name === n) || null });
+          Object.defineProperty(arr, 'refresh', { value: () => {} });
+          return arr;
+        },
+      });
+
+      // 4. languages ไม่ว่าง
+      Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US', 'en'] });
+
+      // 5. ซ่อน automation ใน permissions API
+      const origQuery = window.navigator.permissions && window.navigator.permissions.query.bind(navigator.permissions);
+      if (origQuery) {
+        navigator.permissions.query = (params) => {
+          if (params.name === 'notifications') {
+            return Promise.resolve({ state: Notification.permission, onchange: null });
+          }
+          return origQuery(params);
+        };
+      }
     });
 
     if (controller) controller.currentPage = page;
@@ -254,6 +308,11 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
       '--metrics-recording-only',
       '--mute-audio',
       '--js-flags=--max-old-space-size=192',
+      '--window-size=1024,576',
+      '--disable-ipc-flooding-protection',
+      '--password-store=basic',
+      '--use-mock-keychain',
+      '--disable-features=IsolateOrigins,site-per-process',
     ],
   };
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
