@@ -317,8 +317,13 @@ async function startClientCapture() {
       document.getElementById('s3sub').textContent =
         `(${i + 1}/${ads.length}) เปิด: ${ad.name}`;
 
-      // Navigate display window to the ad URL (reuses same window by name)
-      window.open(ad.url, 'AdsDisplay');
+      // Navigate display tab — ใช้ location.href แทน window.open ป้องกัน Chrome ล้าง window.name ข้าม origin
+      try {
+        displayWin.location.href = ad.url;
+      } catch (_) {
+        // fallback: ถ้า tab ถูกปิดหรือ error
+        displayWin = window.open(ad.url, 'AdsDisplay');
+      }
 
       // Phase 1: wait for page load
       const loadWait = Math.min(waitMs * 0.4, 4000);
