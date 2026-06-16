@@ -77,6 +77,32 @@ input.name-input::placeholder { color: #2a2a2a; font-style: italic; }
 .btn-export { background: #ff0000; color: #fff; }
 .btn-export:hover:not(:disabled) { opacity: .88; }
 
+/* Cookies bar */
+.cookies-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: #111; border: 1px solid #333; border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 8px;
+}
+.cookies-icon { font-size: 22px; flex-shrink: 0; }
+.cookies-info { flex: 1; }
+.cookies-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.cookies-desc { font-size: 11px; color: #555; margin-top: 2px; }
+.cookies-badge-none { font-size: 10px; background: rgba(248,81,73,.15); color: #f87171; padding: 2px 7px; border-radius: 20px; font-weight: 400; }
+.cookies-badge-ok { font-size: 10px; background: rgba(63,185,80,.15); color: #3fb950; padding: 2px 7px; border-radius: 20px; font-weight: 400; }
+.cookies-btn {
+  background: none; border: 1px solid #444; border-radius: 7px;
+  color: #aaa; font-size: 12px; padding: 7px 12px; cursor: pointer;
+  white-space: nowrap; transition: all .15s;
+}
+.cookies-btn:hover { border-color: #facc15; color: #facc15; }
+.cookies-howto {
+  font-size: 11px; color: #555; background: #0d0d0d;
+  border: 1px solid #1e1e1e; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 12px; line-height: 1.7;
+}
+.cookies-howto a { color: #60a5fa; text-decoration: none; }
+.cookies-howto code { background: #1a1a1a; padding: 1px 5px; border-radius: 4px; color: #e8e8e8; }
+
 /* Excel import */
 .excel-bar {
   display: flex; align-items: center; gap: 8px;
@@ -174,6 +200,23 @@ input.name-input::placeholder { color: #2a2a2a; font-style: italic; }
   </div>
   <div class="badge"><div class="dot"></div> 640×480 · วินาทีที่ 5 · ส่งออก .pptx</div>
 
+  <!-- Cookies bar -->
+  <div class="cookies-bar" id="cookies-bar">
+    <div class="cookies-icon">🍪</div>
+    <div class="cookies-info">
+      <div class="cookies-title">YouTube Cookies <span id="cookies-status-badge" class="cookies-badge-none">ยังไม่ได้ตั้งค่า</span></div>
+      <div class="cookies-desc">YouTube บล็อก server IP — ต้องใช้ cookies จาก browser เพื่อ capture ได้</div>
+    </div>
+    <button class="cookies-btn" onclick="document.getElementById('cookies-input').click()">📂 อัปโหลด cookies.txt</button>
+    <input type="file" id="cookies-input" accept=".txt" style="display:none" onchange="uploadCookies(this)">
+  </div>
+  <div class="cookies-howto" id="cookies-howto">
+    <strong>วิธีได้ cookies.txt:</strong>
+    ติดตั้ง extension <em>"Get cookies.txt LOCALLY"</em> ใน Chrome →
+    เปิด <a href="https://www.youtube.com" target="_blank">youtube.com</a> แล้ว Login →
+    คลิก extension → Export → ได้ไฟล์ <code>youtube.com_cookies.txt</code> → อัปโหลดที่นี่
+  </div>
+
   <!-- Excel import bar -->
   <div class="excel-bar">
     <div>
@@ -227,6 +270,44 @@ const MAX = 10;
 let rows = [];
 // { url, name, image: base64|null, error: str|null }
 let captured = [];
+
+// ── Cookies ───────────────────────────────────────────────────
+async function checkCookiesStatus() {
+  try {
+    const res = await fetch('/cookies-status');
+    const { hasCookies } = await res.json();
+    const badge = document.getElementById('cookies-status-badge');
+    const howto = document.getElementById('cookies-howto');
+    if (hasCookies) {
+      badge.className = 'cookies-badge-ok';
+      badge.textContent = '✅ พร้อมใช้งาน';
+      howto.style.display = 'none';
+    } else {
+      badge.className = 'cookies-badge-none';
+      badge.textContent = 'ยังไม่ได้ตั้งค่า';
+      howto.style.display = 'block';
+    }
+  } catch {}
+}
+
+async function uploadCookies(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  const fd = new FormData();
+  fd.append('cookies', file);
+  try {
+    const res = await fetch('/upload-cookies', { method: 'POST', body: fd });
+    const json = await res.json();
+    if (!res.ok || json.error) { showError(json.error); return; }
+    hideError();
+    checkCookiesStatus();
+  } catch (err) {
+    showError('อัปโหลด cookies ไม่ได้: ' + err.message);
+  }
+}
+
+checkCookiesStatus();
 
 // ── URL Rows ──────────────────────────────────────────────────
 function addRow(url = '', name = '') {

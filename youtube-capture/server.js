@@ -1,7 +1,7 @@
 const express = require('express');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
-const { mkdtemp, readFile, rm } = require('fs/promises');
+const { mkdtemp, readFile, rm, writeFile } = require('fs/promises');
 const path = require('path');
 const os = require('os');
 const multer = require('multer');
@@ -12,11 +12,29 @@ const execFileAsync = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Cookies stored in memory (survives until server restarts)
+let cookiesContent = null;
+const COOKIES_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 let isProcessing = false;
+
+// Upload YouTube cookies.txt
+app.post('/upload-cookies', upload.single('cookies'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'ไม่พบไฟล์' });
+  const text = req.file.buffer.toString('utf8');
+  if (!text.includes('youtube.com')) return res.status(400).json({ error: 'ไม่ใช่ไฟล์ cookies ของ YouTube' });
+  cookiesContent = text;
+  await writeFile(COOKIES_PATH, text, 'utf8');
+  res.json({ ok: true, message: 'อัปโหลด cookies สำเร็จ' });
+});
+
+app.get('/cookies-status', (req, res) => {
+  res.json({ hasCookies: !!cookiesContent });
+});
 
 // Download Excel template
 app.get('/template', (req, res) => {
@@ -83,9 +101,14 @@ async function captureFrame(url) {
     const clients = ['ios', 'android', 'web'];
     let downloaded = false;
 
+    // Write cookies to tmp file if available
+    if (cookiesContent) {
+      await writeFile(COOKIES_PATH, cookiesContent, 'utf8');
+    }
+
     for (const client of clients) {
       try {
-        await execFileAsync('yt-dlp', [
+        const args = [
           '-f', 'best[ext=mp4]/best',
           '--no-playlist',
           '--extractor-args', `youtube:player_client=${client}`,
@@ -93,8 +116,11 @@ async function captureFrame(url) {
           '--force-keyframes-at-cuts',
           '-o', videoPath,
           '--no-warnings',
-          url,
-        ], { timeout: 60000 });
+        ];
+        if (cookiesContent) args.push('--cookies', COOKIES_PATH);
+        args.push(url);
+
+        await execFileAsync('yt-dlp', args, { timeout: 60000 });
         downloaded = true;
         break;
       } catch (e) {
