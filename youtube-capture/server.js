@@ -90,8 +90,10 @@ async function getBrowser() {
   browser = await chromium.launch({
     args: [
       '--no-sandbox', '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage', '--disable-gpu',
-      '--single-process',
+      '--disable-dev-shm-usage',
+      // Use SwiftShader software GPU so video can decode without real GPU
+      '--use-gl=swiftshader',
+      '--enable-unsafe-swiftshader',
       '--disable-blink-features=AutomationControlled',
       '--autoplay-policy=no-user-gesture-required',
       // Fix ALSA/audio errors on headless server
@@ -101,7 +103,6 @@ async function getBrowser() {
       '--disable-features=IsolateOrigins,site-per-process,AudioServiceOutOfProcess',
       '--mute-audio',
       // Stability
-      '--disable-setuid-sandbox',
       '--no-first-run',
       '--no-zygote',
     ],
