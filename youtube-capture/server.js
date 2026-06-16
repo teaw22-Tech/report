@@ -10,7 +10,7 @@ const PptxGenJS = require('pptxgenjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -203,7 +203,7 @@ async function captureFrame(url) {
     await page.waitForFunction(() => {
       const v = document.querySelector('video');
       return v && v.readyState >= 2 && v.videoWidth > 0;
-    }, { timeout: 25000 }).catch(() => {});
+    }, { timeout: 10000 }).catch(() => {});
 
     // Seek to second 5 after video has data
     await page.evaluate(() => {
