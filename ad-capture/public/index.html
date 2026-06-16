@@ -72,6 +72,20 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
 .download{display:none;margin-top:1rem;text-align:center;padding:12px;
   background:rgba(29,158,117,.12);border:1px solid var(--accent);border-radius:8px;
   color:var(--accent);text-decoration:none;font-weight:600;font-size:14px}
+
+/* Ad preview row */
+.ad-row{display:flex;align-items:center;gap:8px;background:var(--bg);
+  border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px}
+.ad-row-num{color:var(--muted);width:22px;flex-shrink:0;text-align:center;font-weight:700}
+.ad-row-info{flex:1;overflow:hidden}
+.ad-row-name{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ad-row-url{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+.ad-row-wait{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.ad-row-wait input{width:52px;background:var(--card);border:1px solid var(--border);
+  border-radius:6px;color:var(--accent);padding:4px 6px;font-size:12px;text-align:center}
+.ad-row.capturing{border-color:var(--accent);background:rgba(29,158,117,.05)}
+.ad-row.captured{border-color:rgba(29,158,117,.3);opacity:.7}
+.ad-row.failed{border-color:var(--red);opacity:.7}
 </style>
 </head>
 <body>
@@ -123,22 +137,33 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
   <div class="panel active" id="panelClient">
     <div class="share-hint" id="shareHint">
       <b>วิธีใช้งาน My Browser Capture:</b><br>
-      1️⃣ เลือกไฟล์ Excel แล้วกด <b>เริ่ม</b><br>
-      2️⃣ เบราว์เซอร์เปิด tab ใหม่ชื่อ <b>"Ads Capture Display"</b> → <b>อย่าปิด</b><br>
-      3️⃣ เมื่อถูกถามให้แชร์หน้าจอ → เลือก <b>"Chrome Tab"</b> → เลือก <b>"Ads Capture Display"</b> → กด <b>Share</b><br>
-      4️⃣ กลับมาที่ tab นี้ ระบบจะแคปโฆษณาทีละอันอัตโนมัติ แล้วดาวน์โหลด PPTX ให้เลย
+      1️⃣ เลือกไฟล์ Excel → กด <b>โหลดรายการ</b> (สูงสุด 10 รายการ)<br>
+      2️⃣ ตั้งเวลารอต่อ URL → กด <b>เริ่ม Capture</b><br>
+      3️⃣ Tab ใหม่ <b>"Ads Capture Display"</b> เปิดขึ้น → เมื่อถูกถามให้แชร์ เลือก <b>Chrome Tab → Ads Capture Display → Share</b><br>
+      4️⃣ กลับมา tab นี้ ระบบแคปให้อัตโนมัติ → ดาวน์โหลด PPTX
     </div>
-    <div class="field">
-      <label>ไฟล์ Excel (.xlsx)</label>
-      <input type="file" id="excelClient" accept=".xlsx,.xls" required>
+
+    <!-- Step A: เลือกไฟล์ -->
+    <div id="phaseUpload">
+      <div class="field">
+        <label>ไฟล์ Excel (.xlsx) — สูงสุด 10 รายการต่อการรัน</label>
+        <input type="file" id="excelClient" accept=".xlsx,.xls">
+      </div>
+      <button class="primary" id="btnLoad" onclick="loadExcel()">📂 โหลดรายการจาก Excel</button>
     </div>
-    <div class="field">
-      <label>รอให้หน้าโฆษณาโหลด (วินาที) — YouTube แนะนำ 10+</label>
-      <input type="range" id="waitSec" min="5" max="20" value="10" style="width:180px;vertical-align:middle">
-      <span id="waitVal" style="margin-left:8px;font-size:13px;color:var(--accent)">10 วินาที</span>
+
+    <!-- Step B: Preview + ตั้งเวลา -->
+    <div id="phasePreview" style="display:none">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+        ตั้งเวลารอต่อ URL (วินาที) — YouTube แนะนำ 10+ วินาที
+      </div>
+      <div id="adsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;max-height:340px;overflow-y:auto"></div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="primary" style="flex:1" id="btnClient" onclick="startClientCapture()">🚀 เริ่ม Capture ด้วยหน้าจอของฉัน</button>
+        <button onclick="resetPreview()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;white-space:nowrap">↩ เลือกใหม่</button>
+      </div>
+      <button class="danger" id="cancelClient" onclick="cancelClient()" style="margin-top:8px">⏹ หยุด</button>
     </div>
-    <button class="primary" id="btnClient" onclick="startClientCapture()">🚀 เริ่ม Capture ด้วยหน้าจอของฉัน</button>
-    <button class="danger" id="cancelClient" onclick="cancelClient()">⏹ หยุด</button>
   </div>
 
   <!-- Progress bar -->
@@ -187,10 +212,6 @@ function switchMode(mode) {
 switchMode('client'); // default
 
 // ─── Wait slider ──────────────────────────────────────────────────────────────
-const waitSlider = document.getElementById('waitSec');
-waitSlider.addEventListener('input', () => {
-  document.getElementById('waitVal').textContent = waitSlider.value + ' วินาที';
-});
 
 // ─── Step helpers (client mode) ───────────────────────────────────────────────
 function stepActive(id, sub) {
@@ -233,15 +254,82 @@ function appendLog(text, cls) {
 let clientCancelled = false;
 let displayWin = null;
 let captureStream = null;
+let parsedAds = [];
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function startClientCapture() {
+// ── Phase A: โหลด Excel แล้วแสดง preview ────────────────────────────────────
+async function loadExcel() {
   const fileInput = document.getElementById('excelClient');
   if (!fileInput.files[0]) { alert('กรุณาเลือกไฟล์ Excel ก่อน'); return; }
 
+  const btn = document.getElementById('btnLoad');
+  btn.disabled = true; btn.textContent = 'กำลังอ่าน...';
+
+  const formData = new FormData();
+  formData.append('excel', fileInput.files[0]);
+  try {
+    const res = await fetch('/api/parse-excel', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) { alert('อ่านไฟล์ไม่สำเร็จ: ' + data.error); btn.disabled = false; btn.textContent = '📂 โหลดรายการจาก Excel'; return; }
+
+    parsedAds = data.ads.slice(0, 10); // จำกัด 10 รายการ
+    renderPreview(parsedAds, data.ads.length);
+  } catch (err) {
+    alert('เกิดข้อผิดพลาด: ' + err.message);
+    btn.disabled = false; btn.textContent = '📂 โหลดรายการจาก Excel';
+  }
+}
+
+function renderPreview(ads, total) {
+  const list = document.getElementById('adsList');
+  list.innerHTML = '';
+
+  if (total > 10) {
+    const warn = document.createElement('div');
+    warn.style.cssText = 'font-size:11.5px;color:var(--yellow);margin-bottom:6px';
+    warn.textContent = `⚠ พบ ${total} รายการ — ใช้เฉพาะ 10 รายการแรก`;
+    list.appendChild(warn);
+  }
+
+  ads.forEach((ad, i) => {
+    const row = document.createElement('div');
+    row.className = 'ad-row';
+    row.id = `adrow-${i}`;
+    row.innerHTML = `
+      <div class="ad-row-num">${i + 1}</div>
+      <div class="ad-row-info">
+        <div class="ad-row-name" title="${ad.name}">${ad.name}</div>
+        <div class="ad-row-url" title="${ad.url}">${ad.url}</div>
+      </div>
+      <div class="ad-row-wait">
+        <input type="number" id="wait-${i}" value="10" min="3" max="60" title="วินาทีที่รอ">
+        <span style="color:var(--muted)">วิ</span>
+      </div>`;
+    list.appendChild(row);
+  });
+
+  document.getElementById('phaseUpload').style.display = 'none';
+  document.getElementById('phasePreview').style.display = 'block';
+}
+
+function resetPreview() {
+  document.getElementById('phaseUpload').style.display = 'block';
+  document.getElementById('phasePreview').style.display = 'none';
+  document.getElementById('btnLoad').disabled = false;
+  document.getElementById('btnLoad').textContent = '📂 โหลดรายการจาก Excel';
+  document.getElementById('steps').style.display = 'none';
+  document.getElementById('progressBar').style.display = 'none';
+  document.getElementById('downloadLink').style.display = 'none';
+  parsedAds = [];
+}
+
+// ── Phase B: Capture ─────────────────────────────────────────────────────────
+async function startClientCapture() {
+  if (!parsedAds.length) { alert('กรุณาโหลด Excel ก่อน'); return; }
+
   clientCancelled = false;
-  const waitMs = parseInt(waitSlider.value) * 1000;
+  const ads = parsedAds;
 
   // Reset UI
   document.getElementById('btnClient').disabled = true;
@@ -253,15 +341,7 @@ async function startClientCapture() {
   ['s1','s2','s3','s4'].forEach((id, i) => stepReset(id, (i+1)+'️⃣', id === 's3' ? 'รอเริ่ม...' : ''));
 
   try {
-    // ── STEP 1: Parse Excel ──────────────────────────────────────────────────
-    stepActive('s1', 'กำลังอ่านไฟล์...');
-    const formData = new FormData();
-    formData.append('excel', fileInput.files[0]);
-    const parseRes = await fetch('/api/parse-excel', { method: 'POST', body: formData });
-    const parseData = await parseRes.json();
-    if (parseData.error) { stepError('s1', parseData.error); return resetClientUI(); }
-    const ads = parseData.ads;
-    stepDone('s1', `พบ ${ads.length} รายการ`);
+    stepDone('s1', `${ads.length} รายการ (พร้อม)`);
 
     // ── STEP 2: Open display TAB + request screen share ─────────────────────
     stepActive('s2', 'กำลังเปิด tab แสดงผล...');
@@ -314,19 +394,27 @@ async function startClientCapture() {
       if (clientCancelled) break;
 
       const ad = ads[i];
-      document.getElementById('s3sub').textContent =
-        `(${i + 1}/${ads.length}) เปิด: ${ad.name}`;
+      const waitSec = parseInt(document.getElementById(`wait-${i}`)?.value || '10');
+      const waitMs = waitSec * 1000;
+      const loadWait = Math.min(waitMs * 0.35, 3500);
+      const videoWait = waitMs - loadWait;
 
-      // Navigate display tab — ใช้ location.href แทน window.open ป้องกัน Chrome ล้าง window.name ข้าม origin
+      // Highlight row
+      document.querySelectorAll('.ad-row').forEach(r => r.classList.remove('capturing'));
+      const rowEl = document.getElementById(`adrow-${i}`);
+      if (rowEl) rowEl.classList.add('capturing');
+
+      document.getElementById('s3sub').textContent =
+        `(${i + 1}/${ads.length}) เปิด: ${ad.name} (รอ ${waitSec}s)`;
+
+      // Navigate display tab
       try {
         displayWin.location.href = ad.url;
       } catch (_) {
-        // fallback: ถ้า tab ถูกปิดหรือ error
         displayWin = window.open(ad.url, 'AdsDisplay');
       }
 
-      // Phase 1: wait for page load
-      const loadWait = Math.min(waitMs * 0.4, 4000);
+      // Phase 1: รอโหลดหน้า
       for (let t = 0; t < loadWait; t += 500) {
         if (clientCancelled) break;
         document.getElementById('s3sub').textContent =
@@ -334,8 +422,7 @@ async function startClientCapture() {
         await sleep(500);
       }
 
-      // Phase 2: wait for video to play
-      const videoWait = waitMs - loadWait;
+      // Phase 2: รอวิดีโอเล่น
       for (let t = 0; t < videoWait; t += 500) {
         if (clientCancelled) break;
         document.getElementById('s3sub').textContent =
@@ -354,6 +441,7 @@ async function startClientCapture() {
       const screenshotB64 = canvas.toDataURL('image/jpeg', 0.85);
 
       results.push({ ...ad, screenshotB64, status: 'ok' });
+      if (rowEl) { rowEl.classList.remove('capturing'); rowEl.classList.add('captured'); }
 
       const pct = Math.round(((i + 1) / ads.length) * 90);
       document.getElementById('progressFill').style.width = pct + '%';
@@ -406,10 +494,10 @@ function cancelClient() {
   document.getElementById('s3sub').textContent = 'กำลังหยุด...';
 }
 
-function resetClientUI(resetSteps = true) {
+function resetClientUI(hideSteps = false) {
   document.getElementById('btnClient').disabled = false;
   document.getElementById('cancelClient').style.display = 'none';
-  if (resetSteps) {
+  if (hideSteps) {
     document.getElementById('progressBar').style.display = 'none';
     document.getElementById('steps').style.display = 'none';
   }
