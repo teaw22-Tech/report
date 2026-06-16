@@ -73,7 +73,16 @@ async function getBrowser() {
       '--single-process',
       '--disable-blink-features=AutomationControlled',
       '--autoplay-policy=no-user-gesture-required',
-      '--disable-features=IsolateOrigins,site-per-process',
+      // Fix ALSA/audio errors on headless server
+      '--use-fake-audio-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+      '--disable-audio-output',
+      '--disable-features=IsolateOrigins,site-per-process,AudioServiceOutOfProcess',
+      '--mute-audio',
+      // Stability
+      '--disable-setuid-sandbox',
+      '--no-first-run',
+      '--no-zygote',
     ],
   });
   browser.on('disconnected', () => { browser = null; });
@@ -123,7 +132,7 @@ async function captureFrame(url) {
     });
 
     console.log(`Navigating to: ${url}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 40000 });
 
     // Dismiss consent popup
     try {
@@ -138,38 +147,57 @@ async function captureFrame(url) {
     });
     if (isBot) throw new Error('YouTube bot detection — กรุณาอัปโหลด cookies.txt ใหม่จาก browser ที่ login แล้ว');
 
-    // Click play
-    try { await page.click('button.ytp-large-play-button', { timeout: 5000 }); } catch {}
-
-    // Wait for video with actual frame data
-    await page.waitForFunction(() => {
-      const v = document.querySelector('video');
-      return v && v.readyState >= 3 && v.videoWidth > 0;
-    }, { timeout: 25000 }).catch(() => {});
-
-    // Seek to second 5
+    // Mute + try play
     await page.evaluate(() => {
       const v = document.querySelector('video');
-      if (v) { v.muted = true; v.currentTime = 5; v.play().catch(() => {}); }
+      if (v) { v.muted = true; v.volume = 0; }
+    });
+    try { await page.click('button.ytp-large-play-button', { timeout: 4000 }); } catch {}
+
+    // Try to seek to second 5 if video is available
+    await page.evaluate(() => {
+      const v = document.querySelector('video');
+      if (v && v.readyState >= 2) { v.muted = true; v.currentTime = 5; v.play().catch(() => {}); }
     });
 
-    await page.waitForFunction(() => {
-      const v = document.querySelector('video');
-      return v && v.currentTime >= 4.5;
-    }, { timeout: 8000 }).catch(() => {});
+    // Wait 4 seconds for video frame or thumbnail to render
+    await page.waitForTimeout(4000);
 
-    await page.waitForTimeout(1200);
-
-    // Crop to video element
+    // Try to get video bounding box — if not available, screenshot full page cropped to player area
     const videoEl = await page.$('video');
     let screenshot;
+
     if (videoEl) {
       const box = await videoEl.boundingBox();
-      if (box && box.width > 200 && box.height > 100) {
-        screenshot = await page.screenshot({ type: 'png',
-          clip: { x: box.x, y: box.y, width: box.width, height: box.height } });
+      if (box && box.width > 100 && box.height > 80) {
+        // Seek again right before screenshot
+        await page.evaluate(() => {
+          const v = document.querySelector('video');
+          if (v) { v.currentTime = 5; }
+        });
+        await page.waitForTimeout(800);
+        screenshot = await page.screenshot({
+          type: 'png',
+          clip: { x: Math.max(0, box.x), y: Math.max(0, box.y), width: box.width, height: box.height },
+        });
       }
     }
+
+    // Fallback: crop to YouTube player area
+    if (!screenshot) {
+      const playerEl = await page.$('#movie_player, .html5-video-player, ytd-player');
+      if (playerEl) {
+        const box = await playerEl.boundingBox();
+        if (box) {
+          screenshot = await page.screenshot({
+            type: 'png',
+            clip: { x: Math.max(0, box.x), y: Math.max(0, box.y), width: Math.min(box.width, 1280), height: Math.min(box.height, 720) },
+          });
+        }
+      }
+    }
+
+    // Last fallback: full page screenshot
     if (!screenshot) screenshot = await page.screenshot({ type: 'png' });
 
     return { success: true, data: screenshot };
