@@ -2,41 +2,89 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<title>Ads Capture Display</title>
+<title>Ads Display</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #0d1117; color: #e6edf3;
-    font-family: 'DM Sans', system-ui, sans-serif;
-    display: flex; align-items: center; justify-content: center;
-    height: 100vh; flex-direction: column; gap: 16px;
-  }
-  .icon { font-size: 64px; }
-  h1 { font-size: 28px; font-weight: 700; color: #1D9E75; }
-  p { font-size: 15px; color: #7d8590; text-align: center; line-height: 1.6; }
-  .badge {
-    background: rgba(29,158,117,.12); border: 1px solid rgba(29,158,117,.4);
-    border-radius: 8px; padding: 8px 20px; font-size: 13px; color: #1D9E75;
-  }
-  .loading { font-size: 14px; color: #e3b341; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#0d1117; color:#e6edf3;
+  font-family:system-ui,sans-serif;
+  height:100vh; overflow:hidden;
+}
+.center {
+  position:absolute; top:45%; left:50%;
+  transform:translate(-50%,-50%);
+  text-align:center; padding:0 40px;
+}
+.idle-icon { font-size:64px; margin-bottom:16px; display:block; }
+.num-badge { font-size:15px; color:#7d8590; margin-bottom:16px; letter-spacing:.05em; }
+.ad-name { font-size:32px; font-weight:800; color:#fff; margin-bottom:12px; line-height:1.2; }
+.ad-url { font-size:12px; color:#444d56; max-width:700px; word-break:break-all; line-height:1.5; margin:0 auto; }
+#cntBox {
+  position:fixed; bottom:28px; right:28px;
+  background:rgba(29,158,117,.12);
+  border:2px solid #1D9E75; border-radius:20px;
+  padding:18px 26px; text-align:center; min-width:120px;
+}
+#cntNum { font-size:64px; font-weight:900; color:#1D9E75; line-height:1; display:block; }
+#cntLbl { font-size:13px; color:#7d8590; margin-top:6px; }
+#totalBox { position:fixed; bottom:32px; left:28px; font-size:13px; color:#7d8590; line-height:1.6; }
 </style>
 </head>
 <body>
-  <div class="icon">📺</div>
-  <h1>Ads Capture Display</h1>
-  <p id="msg">หน้าต่างนี้ใช้สำหรับแสดงโฆษณา<br>ระบบจะเปลี่ยนหน้าไปยังลิงก์โฆษณาทีละอันโดยอัตโนมัติ</p>
-  <div class="badge" id="badge">⬅ กรุณาเลือก Tab นี้เมื่อถูกถามให้แชร์หน้าจอ</div>
+
+<div class="center">
+  <span class="idle-icon" id="icon">📺</span>
+  <div class="num-badge" id="numBadge">Ads Capture Display</div>
+  <div class="ad-name" id="adName">พร้อมรับโฆษณา</div>
+  <div class="ad-url" id="adUrl">ระบบจะเปลี่ยน URL อัตโนมัติ</div>
+</div>
+
+<div id="cntBox">
+  <span id="cntNum">–</span>
+  <div id="cntLbl">รอเริ่ม</div>
+</div>
+
+<div id="totalBox"></div>
 
 <script>
-  // ถ้ามี ?goto=URL ให้ redirect ทันที — ใช้เป็น relay ข้าม origin
-  const params = new URLSearchParams(location.search);
-  const goto = params.get('goto');
-  if (goto) {
-    document.getElementById('msg').textContent = 'กำลังเปิดลิงก์โฆษณา...';
-    document.getElementById('badge').className = 'loading';
-    document.getElementById('badge').textContent = '⏳ กำลังโหลด...';
-    setTimeout(() => { window.location.href = goto; }, 200);
+(function () {
+  var p = new URLSearchParams(location.search);
+  var goto      = p.get('goto');
+  var idx       = parseInt(p.get('idx')        || '0');
+  var total     = parseInt(p.get('total')      || '1');
+  var name      = p.get('name')                || 'โฆษณา';
+  var sec       = parseInt(p.get('sec')        || '3');
+  var totalwait = parseInt(p.get('totalwait')  || '0');
+
+  if (!goto) return;
+
+  document.getElementById('icon').remove();
+  document.getElementById('numBadge').textContent = 'โฆษณาที่ ' + (idx + 1) + ' / ' + total;
+  document.getElementById('adName').textContent   = name;
+  document.getElementById('adUrl').textContent    = decodeURIComponent(goto);
+  document.getElementById('cntLbl').textContent   = 'วินาที';
+
+  if (totalwait > 0) {
+    document.getElementById('totalBox').innerHTML =
+      '⏱ เหลืออีกประมาณ <b>' + totalwait + '</b> วินาที';
   }
+
+  var n = sec;
+  document.getElementById('cntNum').textContent = n;
+
+  var timer = setInterval(function () {
+    n--;
+    if (n > 0) {
+      document.getElementById('cntNum').textContent = n;
+    } else {
+      clearInterval(timer);
+      document.getElementById('cntNum').textContent = '▶';
+      document.getElementById('cntLbl').textContent = 'กำลังเปิด...';
+      try { window.opener && window.opener.postMessage({ type: 'navigating', idx: idx }, '*'); } catch (e) {}
+      setTimeout(function () { window.location.href = goto; }, 150);
+    }
+  }, 1000);
+})();
 </script>
 </body>
 </html>

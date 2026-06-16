@@ -397,60 +397,72 @@ async function startClientCapture() {
     // ── STEP 3: Capture each ad ───────────────────────────────────────────────
     stepActive('s3', `0 / ${ads.length}`);
     const results = [];
+    const CDWN = 3; // วินาที countdown ใน display.html ก่อนเปิด YouTube
+
+    // คำนวณเวลารวมที่ต้องรอ
+    function calcRemaining(fromIdx) {
+      let s = 0;
+      for (let j = fromIdx; j < ads.length; j++) {
+        s += CDWN + parseInt(document.getElementById(`wait-${j}`)?.value || '10') + 1;
+      }
+      return s;
+    }
 
     for (let i = 0; i < ads.length; i++) {
       if (clientCancelled) break;
 
       const ad = ads[i];
       const waitSec = parseInt(document.getElementById(`wait-${i}`)?.value || '10');
-      const waitMs = waitSec * 1000;
-      const loadWait = Math.min(waitMs * 0.35, 3500);
-      const videoWait = waitMs - loadWait;
+      const remaining = calcRemaining(i);
 
       // Highlight row
       document.querySelectorAll('.ad-row').forEach(r => r.classList.remove('capturing'));
       const rowEl = document.getElementById(`adrow-${i}`);
       if (rowEl) rowEl.classList.add('capturing');
 
-      document.getElementById('s3sub').textContent =
-        `(${i + 1}/${ads.length}) เปิด: ${ad.name} (รอ ${waitSec}s)`;
+      // Relay ผ่าน display.html เสมอ (ทำงานได้แม้ popup อยู่บน YouTube cross-origin)
+      const relayUrl = '/display.html'
+        + '?goto='      + encodeURIComponent(ad.url)
+        + '&idx='       + i
+        + '&total='     + ads.length
+        + '&name='      + encodeURIComponent(ad.name)
+        + '&sec='       + CDWN
+        + '&totalwait=' + remaining;
 
-      // นำทาง popup ไปยัง URL ใหม่ (cross-origin navigation ได้ผ่าน opener reference)
-      try {
-        displayWin.location.href = ad.url;
-        await sleep(300); // รอให้ navigation เริ่ม
-        displayWin.focus();
-      } catch (_) {
-        // popup ถูกปิด → เปิดใหม่เต็มจอ
-        displayWin = window.open(ad.url, 'AdsDisplay',
-          `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no`);
+      if (!displayWin || displayWin.closed) {
+        displayWin = window.open(relayUrl, 'AdsDisplay',
+          `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no,scrollbars=no`);
         if (displayWin) {
           try { displayWin.moveTo(0, 0); displayWin.resizeTo(sw, sh); } catch(_) {}
-          displayWin.focus();
         }
+      } else {
+        displayWin.location.href = relayUrl; // กลับมา same-origin → ทำงานได้เสมอ
       }
+      if (displayWin) { try { displayWin.focus(); } catch(_) {} }
 
-      // Phase 1: รอโหลดหน้า
-      for (let t = 0; t < loadWait; t += 500) {
+      // รอ display.html นับ countdown (CDWN วินาที) แล้ว navigate ไป YouTube
+      for (let t = CDWN; t > 0; t--) {
         if (clientCancelled) break;
         document.getElementById('s3sub').textContent =
-          `(${i+1}/${ads.length}) ${ad.name} — โหลดหน้า... ${Math.round((loadWait-t)/1000)}s`;
-        await sleep(500);
+          `(${i+1}/${ads.length}) ${ad.name} — ⏳ countdown ${t}s`;
+        await sleep(1000);
       }
+      await sleep(600); // buffer รอ YouTube เริ่มโหลด
 
-      // Phase 2: รอวิดีโอเล่น
-      for (let t = 0; t < videoWait; t += 500) {
+      // รอ YouTube โหลดและโฆษณาเล่น
+      for (let t = waitSec; t > 0; t--) {
         if (clientCancelled) break;
+        const remNow = calcRemaining(i) - (waitSec - t);
         document.getElementById('s3sub').textContent =
-          `(${i+1}/${ads.length}) ${ad.name} — รอโฆษณาเล่น... ${Math.round((videoWait-t)/1000)}s`;
-        await sleep(500);
+          `(${i+1}/${ads.length}) ${ad.name} — รอโฆษณา ${t}s  |  เหลือรวม ~${remNow}s`;
+        await sleep(1000);
       }
 
       if (clientCancelled) { results.push({ ...ad, screenshotB64: null, error: 'ถูกยกเลิก' }); break; }
 
-      // Focus popup ก่อนถ่ายภาพ เพื่อให้อยู่หน้าสุด
-      try { displayWin.focus(); } catch(_) {}
-      await sleep(300);
+      // Focus popup ก่อนถ่ายภาพ
+      if (displayWin) { try { displayWin.focus(); } catch(_) {} }
+      await sleep(400);
 
       // Capture frame
       document.getElementById('s3sub').textContent = `(${i+1}/${ads.length}) ${ad.name} — 📸 ถ่ายภาพ...`;
@@ -463,8 +475,8 @@ async function startClientCapture() {
       results.push({ ...ad, screenshotB64, status: 'ok' });
       if (rowEl) { rowEl.classList.remove('capturing'); rowEl.classList.add('captured'); }
 
-      const pct = Math.round(((i + 1) / ads.length) * 90);
-      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressFill').style.width =
+        Math.round(((i + 1) / ads.length) * 90) + '%';
     }
 
     // Stop stream และย้าย main window กลับ
