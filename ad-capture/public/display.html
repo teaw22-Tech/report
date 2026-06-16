@@ -246,10 +246,14 @@ async function runController(config){
     }
     await sleep(700); // buffer รอ YouTube เริ่มโหลด
 
-    /* wait for YouTube to play */
-    for(let t=waitSec;t>0;t--){
+    /* capture เร็ว (ขณะโฆษณากำลังเล่น) อย่ารอจนจบโฆษณา */
+    const captureAt = Math.min(waitSec, 7); // จับภาพที่วินาทีที่ 7 หรือน้อยกว่า
+    const afterCap  = Math.max(0, waitSec - captureAt);
+
+    /* รอจนถึงจุด capture */
+    for(let t=captureAt;t>0;t--){
       sMain.textContent=`(${i+1}/${ads.length}) ${ad.name}`;
-      sSub.innerHTML=`📺 YouTube <span class="green">${t}</span>s  |  เหลือ ~${remaining(i)-(waitSec-t)}s`;
+      sSub.innerHTML=`📺 รอโฆษณา <span class="green">${t}</span>s  |  เหลือ ~${remaining(i)-(captureAt-t)}s`;
       await sleep(1000);
     }
 
@@ -267,7 +271,13 @@ async function runController(config){
 
     if(el){ el.classList.remove('capturing'); el.classList.add('done'); }
     prog.style.width=Math.round(((i+1)/ads.length)*90)+'%';
-  }
+
+    /* รอเวลาที่เหลือก่อนเปลี่ยน URL */
+    for(let t=afterCap;t>0;t--){
+      sMain.textContent=`(${i+1}/${ads.length}) ✅ ${ad.name}`;
+      sSub.textContent=`รอเปลี่ยน URL ถัดไป ${t}s`;
+      await sleep(1000);
+    }
 
   /* stop & close */
   stream.getTracks().forEach(t=>t.stop());
