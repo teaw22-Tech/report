@@ -1,7 +1,7 @@
 {
   "name": "youtube-capture",
   "version": "1.0.0",
-  "description": "Capture YouTube screenshot at 5 seconds using yt-dlp",
+  "description": "Capture YouTube screenshot at 5 seconds",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,6 +9,7 @@
   "dependencies": {
     "express": "^5.2.1",
     "multer": "^2.1.1",
+    "playwright": "^1.60.0",
     "pptxgenjs": "^4.0.1",
     "xlsx": "^0.18.5"
   }
