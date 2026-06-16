@@ -75,30 +75,44 @@ app.post('/parse-excel', upload.single('file'), (req, res) => {
 // Capture a single frame at second 5 using yt-dlp + ffmpeg
 async function captureFrame(url) {
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ytcap-'));
+  const videoPath = path.join(tmpDir, 'clip.mp4');
   const outPath = path.join(tmpDir, 'frame.png');
   try {
-    // Step 1: get direct video stream URL via Android client (bypasses bot detection)
-    const { stdout } = await execFileAsync('yt-dlp', [
-      '--get-url',
-      '-f', 'best[ext=mp4]/best',
-      '--no-playlist',
-      '--extractor-args', 'youtube:player_client=android',
-      '--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
-      url,
-    ], { timeout: 30000 });
+    // Download only seconds 4-8 directly (yt-dlp handles auth internally)
+    // Try ios client first, fall back to web
+    const clients = ['ios', 'android', 'web'];
+    let downloaded = false;
 
-    const streamUrl = stdout.trim().split('\n')[0];
-    if (!streamUrl) throw new Error('yt-dlp ไม่สามารถดึง stream URL ได้');
+    for (const client of clients) {
+      try {
+        await execFileAsync('yt-dlp', [
+          '-f', 'best[ext=mp4]/best',
+          '--no-playlist',
+          '--extractor-args', `youtube:player_client=${client}`,
+          '--download-sections', '*4-8',
+          '--force-keyframes-at-cuts',
+          '-o', videoPath,
+          '--no-warnings',
+          url,
+        ], { timeout: 60000 });
+        downloaded = true;
+        break;
+      } catch (e) {
+        console.log(`Client ${client} failed, trying next...`);
+      }
+    }
 
-    // Step 2: use ffmpeg to extract frame at second 5
+    if (!downloaded) throw new Error('ไม่สามารถดาวน์โหลดวิดีโอได้ (YouTube บล็อก) กรุณาลองอีกครั้งในภายหลัง');
+
+    // Extract frame at ~1s into the clip (= second 5 of original)
     await execFileAsync('ffmpeg', [
-      '-ss', '5',
-      '-i', streamUrl,
+      '-i', videoPath,
+      '-ss', '1',
       '-vframes', '1',
       '-vf', 'scale=640:480:force_original_aspect_ratio=decrease,pad=640:480:(ow-iw)/2:(oh-ih)/2:black',
       '-y',
       outPath,
-    ], { timeout: 60000 });
+    ], { timeout: 30000 });
 
     const data = await readFile(outPath);
     return { success: true, data };
