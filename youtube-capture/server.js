@@ -147,58 +147,56 @@ async function captureFrame(url) {
     });
     if (isBot) throw new Error('YouTube bot detection — กรุณาอัปโหลด cookies.txt ใหม่จาก browser ที่ login แล้ว');
 
-    // Mute + try play
+    // Mute video + try to play
     await page.evaluate(() => {
       const v = document.querySelector('video');
       if (v) { v.muted = true; v.volume = 0; }
     });
     try { await page.click('button.ytp-large-play-button', { timeout: 4000 }); } catch {}
 
-    // Try to seek to second 5 if video is available
-    await page.evaluate(() => {
+    // Wait for video to have decodable frames
+    await page.waitForFunction(() => {
       const v = document.querySelector('video');
-      if (v && v.readyState >= 2) { v.muted = true; v.currentTime = 5; v.play().catch(() => {}); }
+      return v && v.readyState >= 2 && v.videoWidth > 0 && v.videoHeight > 0;
+    }, { timeout: 25000 }).catch(() => {});
+
+    // Seek to second 5 and wait for seeked event
+    const seeked = await page.evaluate(() => new Promise(resolve => {
+      const v = document.querySelector('video');
+      if (!v || v.videoWidth === 0) return resolve(false);
+      v.muted = true;
+      v.currentTime = 5;
+      const onSeeked = () => { v.removeEventListener('seeked', onSeeked); resolve(true); };
+      v.addEventListener('seeked', onSeeked);
+      setTimeout(() => resolve(false), 5000);
+    }));
+
+    console.log('Seeked to 5s:', seeked, '— capturing via canvas');
+
+    // Capture frame directly from video via Canvas API (not screenshot)
+    const frameBase64 = await page.evaluate(() => {
+      const v = document.querySelector('video');
+      if (!v || v.videoWidth === 0 || v.videoHeight === 0) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      // Black background
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 640, 480);
+      // Draw video frame scaled to fit
+      const vr = v.videoWidth / v.videoHeight;
+      const cr = 640 / 480;
+      let sw = 640, sh = 480, sx = 0, sy = 0;
+      if (vr > cr) { sh = 640 / vr; sy = (480 - sh) / 2; }
+      else { sw = 480 * vr; sx = (640 - sw) / 2; }
+      ctx.drawImage(v, sx, sy, sw, sh);
+      return canvas.toDataURL('image/png').split(',')[1];
     });
 
-    // Wait 4 seconds for video frame or thumbnail to render
-    await page.waitForTimeout(4000);
+    if (!frameBase64) throw new Error('ไม่สามารถดึง frame จากวิดีโอได้ — วิดีโออาจไม่โหลด หรือ cookies หมดอายุ');
 
-    // Try to get video bounding box — if not available, screenshot full page cropped to player area
-    const videoEl = await page.$('video');
-    let screenshot;
-
-    if (videoEl) {
-      const box = await videoEl.boundingBox();
-      if (box && box.width > 100 && box.height > 80) {
-        // Seek again right before screenshot
-        await page.evaluate(() => {
-          const v = document.querySelector('video');
-          if (v) { v.currentTime = 5; }
-        });
-        await page.waitForTimeout(800);
-        screenshot = await page.screenshot({
-          type: 'png',
-          clip: { x: Math.max(0, box.x), y: Math.max(0, box.y), width: box.width, height: box.height },
-        });
-      }
-    }
-
-    // Fallback: crop to YouTube player area
-    if (!screenshot) {
-      const playerEl = await page.$('#movie_player, .html5-video-player, ytd-player');
-      if (playerEl) {
-        const box = await playerEl.boundingBox();
-        if (box) {
-          screenshot = await page.screenshot({
-            type: 'png',
-            clip: { x: Math.max(0, box.x), y: Math.max(0, box.y), width: Math.min(box.width, 1280), height: Math.min(box.height, 720) },
-          });
-        }
-      }
-    }
-
-    // Last fallback: full page screenshot
-    if (!screenshot) screenshot = await page.screenshot({ type: 'png' });
+    return { success: true, data: Buffer.from(frameBase64, 'base64') };
 
     return { success: true, data: screenshot };
   } catch (err) {
