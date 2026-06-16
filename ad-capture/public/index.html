@@ -136,11 +136,11 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
   <!-- ── Client / Screen Share mode panel ── -->
   <div class="panel active" id="panelClient">
     <div class="share-hint" id="shareHint">
-      <b>วิธีใช้งาน My Browser Capture:</b><br>
-      1️⃣ เลือกไฟล์ Excel → กด <b>โหลดรายการ</b> (สูงสุด 10 รายการ)<br>
-      2️⃣ ตั้งเวลารอต่อ URL → กด <b>เริ่ม Capture</b><br>
-      3️⃣ เมื่อถูกถามให้แชร์หน้าจอ → เลือก <b>Entire Screen</b> → กด <b>Share</b> (แค่นี้พอ!)<br>
-      4️⃣ หน้าต่างโฆษณาจะเปิดเต็มจออัตโนมัติ ระบบแคปให้เอง → ดาวน์โหลด PPTX
+      <b>วิธีใช้งาน My Browser Capture (YouTube เท่านั้น):</b><br>
+      1️⃣ เลือกไฟล์ Excel ที่มี URL ของ YouTube → กด <b>โหลดรายการ</b> (สูงสุด 10 รายการ)<br>
+      2️⃣ ตั้งเวลารอต่อ URL (แนะนำ 15+ วินาทีสำหรับ YouTube) → กด <b>เริ่ม Capture</b><br>
+      3️⃣ เมื่อถูกถามให้แชร์หน้าจอ → เลือก <b>Entire Screen</b> → กด <b>Share</b><br>
+      4️⃣ <b>อย่าคลิกอะไร!</b> หน้าต่างโฆษณาจะเปลี่ยน URL ให้เองอัตโนมัติ → ดาวน์โหลด PPTX
     </div>
 
     <!-- Step A: เลือกไฟล์ -->
@@ -177,7 +177,7 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
     </div>
     <div class="step" id="s2">
       <div class="step-icon">2️⃣</div>
-      <div class="step-text">เลือก <b>"Entire Screen"</b> → กด Share (ง่ายสุด)<div class="step-sub" id="s2sub"></div></div>
+      <div class="step-text">เลือก <b>"Entire Screen"</b> → กด Share → <b>อย่าคลิกอะไร!</b><div class="step-sub" id="s2sub"></div></div>
     </div>
     <div class="step" id="s3">
       <div class="step-icon">3️⃣</div>
@@ -274,6 +274,10 @@ async function loadExcel() {
     if (data.error) { alert('อ่านไฟล์ไม่สำเร็จ: ' + data.error); btn.disabled = false; btn.textContent = '📂 โหลดรายการจาก Excel'; return; }
 
     parsedAds = data.ads.slice(0, 10); // จำกัด 10 รายการ
+    const nonYT = parsedAds.filter(a => !a.url.includes('youtube.com') && !a.url.includes('youtu.be'));
+    if (nonYT.length > 0) {
+      alert(`⚠ พบ ${nonYT.length} รายการที่ไม่ใช่ YouTube URL\nMy Browser Capture ใช้ได้เฉพาะ YouTube เท่านั้น\nURL อื่นอาจไม่แสดงผลถูกต้อง`);
+    }
     renderPreview(parsedAds, data.ads.length);
   } catch (err) {
     alert('เกิดข้อผิดพลาด: ' + err.message);
@@ -358,7 +362,7 @@ async function startClientCapture() {
       return resetClientUI();
     }
 
-    // เปิด popup เต็มจอหลัง share แล้ว — จะปรากฏบนหน้าจอที่กำลัง capture
+    // เปิด popup และย้าย main window ออกนอกจอ เพื่อให้ popup อยู่หน้าสุด
     displayWin = window.open('/display.html', 'AdsDisplay',
       `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no,scrollbars=no`);
     if (!displayWin) {
@@ -366,8 +370,12 @@ async function startClientCapture() {
       stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup ที่ address bar แล้วลองใหม่');
       return resetClientUI();
     }
-    try { displayWin.focus(); } catch(_) {}
-    await sleep(1200); // รอ popup และ display.html โหลด
+    // ย้าย main window ออกนอกจอ ป้องกันบัง popup
+    try { window.moveTo(sw * 2, 0); } catch(_) {}
+    // ขยาย popup เต็มจอ
+    try { displayWin.moveTo(0, 0); displayWin.resizeTo(sw, sh); } catch(_) {}
+    displayWin.focus();
+    await sleep(1500); // รอ popup และ display.html โหลด
 
     // Setup video element to pull frames from stream
     const video = document.createElement('video');
@@ -407,14 +415,19 @@ async function startClientCapture() {
       document.getElementById('s3sub').textContent =
         `(${i + 1}/${ads.length}) เปิด: ${ad.name} (รอ ${waitSec}s)`;
 
-      // Popup window รองรับ cross-origin navigation ได้โดยตรง
+      // นำทาง popup ไปยัง URL ใหม่ (cross-origin navigation ได้ผ่าน opener reference)
       try {
         displayWin.location.href = ad.url;
+        await sleep(300); // รอให้ navigation เริ่ม
         displayWin.focus();
       } catch (_) {
-        // popup ถูกปิด → เปิดใหม่
+        // popup ถูกปิด → เปิดใหม่เต็มจอ
         displayWin = window.open(ad.url, 'AdsDisplay',
-          `width=${pw},height=${ph},left=${Math.round((sw-pw)/2)},top=${Math.round((sh-ph)/2)},toolbar=no,menubar=no`);
+          `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no`);
+        if (displayWin) {
+          try { displayWin.moveTo(0, 0); displayWin.resizeTo(sw, sh); } catch(_) {}
+          displayWin.focus();
+        }
       }
 
       // Phase 1: รอโหลดหน้า
@@ -435,6 +448,10 @@ async function startClientCapture() {
 
       if (clientCancelled) { results.push({ ...ad, screenshotB64: null, error: 'ถูกยกเลิก' }); break; }
 
+      // Focus popup ก่อนถ่ายภาพ เพื่อให้อยู่หน้าสุด
+      try { displayWin.focus(); } catch(_) {}
+      await sleep(300);
+
       // Capture frame
       document.getElementById('s3sub').textContent = `(${i+1}/${ads.length}) ${ad.name} — 📸 ถ่ายภาพ...`;
       const canvas = document.createElement('canvas');
@@ -450,10 +467,11 @@ async function startClientCapture() {
       document.getElementById('progressFill').style.width = pct + '%';
     }
 
-    // Stop stream
+    // Stop stream และย้าย main window กลับ
     captureStream.getTracks().forEach(t => t.stop());
     captureStream = null;
     if (displayWin) { displayWin.close(); displayWin = null; }
+    try { window.moveTo(0, 0); window.focus(); } catch(_) {}
 
     if (clientCancelled && results.every(r => !r.screenshotB64)) {
       stepError('s3', 'ยกเลิกทั้งหมด ไม่มีภาพส่ง');
