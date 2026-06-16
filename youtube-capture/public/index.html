@@ -256,6 +256,10 @@ async function capture() {
 
     clearInterval(stepTimer);
 
+    if (res.status === 429) {
+      const json = await res.json().catch(() => ({}));
+      throw new Error(json.error || 'ระบบกำลังยุ่ง กรุณารอแล้วลองใหม่');
+    }
     if (!res.ok) {
       const json = await res.json().catch(() => ({ error: 'เกิดข้อผิดพลาด' }));
       throw new Error(json.error || 'เกิดข้อผิดพลาด');
