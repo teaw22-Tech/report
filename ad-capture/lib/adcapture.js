@@ -364,33 +364,62 @@ async function buildPptx(results, outFile) {
     x: 0.5, y: 4, w: 12, h: 1, fontSize: 16, color: '666666',
   });
 
+  // จัดกลุ่มโฆษณาตาม type และใส่ section slide นำหน้าแต่ละกลุ่ม
+  const groups = [];
+  const seenTypes = new Map();
   for (const r of results) {
-    const slide = pptx.addSlide();
-    slide.addText(r.name, {
-      x: 0.4, y: 0.25, w: 12.5, h: 0.6, fontSize: 20, bold: true, color: '222222',
-    });
-    slide.addText(`Type: ${r.type}`, {
-      x: 0.4, y: 0.8, w: 12.5, h: 0.35, fontSize: 12, color: '888888',
+    const key = r.type || r.sheet || 'Other';
+    if (!seenTypes.has(key)) {
+      seenTypes.set(key, groups.length);
+      groups.push({ type: key, items: [] });
+    }
+    groups[seenTypes.get(key)].items.push(r);
+  }
+
+  for (const group of groups) {
+    // Section divider slide
+    const section = pptx.addSlide();
+    section.addText(group.type, {
+      x: 0, y: 2.7, w: 13.33, h: 1.5,
+      fontSize: 60, bold: true, color: '222222', align: 'center', valign: 'middle',
     });
 
-    if (r.status === 'ok' && r.screenshot && fs.existsSync(r.screenshot)) {
-      slide.addImage({ path: r.screenshot, x: 0.6, y: 1.3, w: 9, h: 5.06 });
-    } else {
-      slide.addText(`แคปไม่สำเร็จ: ${r.error || 'ไม่ทราบสาเหตุ'}`, {
-        x: 0.6, y: 2.5, w: 9, h: 1, fontSize: 14, color: 'CC0000',
+    for (const r of group.items) {
+      const slide = pptx.addSlide();
+
+      // ชื่อโฆษณา — full width, top
+      slide.addText(r.name, {
+        x: 0, y: 0, w: 13.33, h: 0.6, fontSize: 20, bold: true, color: '222222',
+        valign: 'middle',
+      });
+
+      // Type bar
+      slide.addText(`Type: ${r.type}`, {
+        x: 0, y: 0.45, w: 13.33, h: 0.27, fontSize: 12, color: '888888',
+        valign: 'middle',
+      });
+
+      // Screenshot เต็มความกว้าง
+      if (r.status === 'ok' && r.screenshot && fs.existsSync(r.screenshot)) {
+        slide.addImage({ path: r.screenshot, x: 0, y: 0.72, w: 13.33, h: 6.0 });
+      } else {
+        slide.addText(`แคปไม่สำเร็จ: ${r.error || 'ไม่ทราบสาเหตุ'}`, {
+          x: 0, y: 2.5, w: 13.33, h: 1, fontSize: 14, color: 'CC0000', align: 'center',
+        });
+      }
+
+      if (r.warning) {
+        slide.addText(`⚠ ${r.warning}`, {
+          x: 0, y: 6.72, w: 13.33, h: 0.25, fontSize: 9, color: 'CC8800',
+        });
+      }
+
+      // URL เล็กๆ ล่างสุด
+      slide.addText(r.url, {
+        x: 0, y: 6.97, w: 13.33, h: 0.25, fontSize: 7, color: '4A90D9',
+        hyperlink: { url: r.url },
       });
     }
-
-    if (r.warning) {
-      slide.addText(`⚠ ${r.warning}`, {
-        x: 0.4, y: 6.2, w: 12.5, h: 0.35, fontSize: 11, color: 'CC8800',
-      });
-    }
-
-    slide.addText(r.url, {
-      x: 0.4, y: 6.6, w: 12.5, h: 0.6, fontSize: 9, color: '4A90D9',
-      hyperlink: { url: r.url },
-    });
   }
 
   await pptx.writeFile({ fileName: outFile });
