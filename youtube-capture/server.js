@@ -72,20 +72,32 @@ app.post('/capture', async (req, res) => {
       window.chrome = { runtime: {} };
     });
 
-    // Go to embed URL — more reliable for autoplay than watch page
-    const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&start=5&mute=1&controls=0&modestbranding=1`;
-    await page.goto(embedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    // Use watch page directly — avoids embed restrictions (Error 153)
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}&t=5`;
+    await page.goto(watchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // Try clicking play button in case autoplay is blocked
+    // Dismiss cookie/consent popup if present
     try {
-      await page.click('button.ytp-large-play-button', { timeout: 3000 });
-    } catch { /* no play button visible, autoplay likely worked */ }
+      await page.click('button[aria-label="Reject all"], button[aria-label="Accept all"], .eom-button-row button:first-child', { timeout: 3000 });
+      await page.waitForTimeout(500);
+    } catch { /* no popup */ }
 
-    // Wait for video frame to render (not black)
+    // Click play button
+    try {
+      await page.click('button.ytp-large-play-button', { timeout: 5000 });
+    } catch { /* video may have autoplayed */ }
+
+    // Wait for video to be playing
     await page.waitForFunction(() => {
       const video = document.querySelector('video');
-      return video && video.readyState >= 2 && !video.paused;
+      return video && video.readyState >= 2;
     }, { timeout: 15000 }).catch(() => {});
+
+    // Seek to second 5
+    await page.evaluate(() => {
+      const v = document.querySelector('video');
+      if (v) { v.currentTime = 5; v.play().catch(() => {}); }
+    });
 
     // Seek to exactly second 5
     await page.evaluate(() => {
