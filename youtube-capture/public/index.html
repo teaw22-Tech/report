@@ -89,6 +89,8 @@ input.name-input::placeholder { color: #2a2a2a; font-style: italic; }
 .cookies-desc { font-size: 11px; color: #555; margin-top: 2px; }
 .cookies-badge-none { font-size: 10px; background: rgba(248,81,73,.15); color: #f87171; padding: 2px 7px; border-radius: 20px; font-weight: 400; }
 .cookies-badge-ok { font-size: 10px; background: rgba(63,185,80,.15); color: #3fb950; padding: 2px 7px; border-radius: 20px; font-weight: 400; }
+.cookies-badge-expired { font-size: 10px; background: rgba(248,81,73,.25); color: #ff4444; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+.cookies-badge-soon { font-size: 10px; background: rgba(255,165,0,.15); color: #ffa500; padding: 2px 7px; border-radius: 20px; font-weight: 400; }
 .cookies-btn {
   background: none; border: 1px solid #444; border-radius: 7px;
   color: #aaa; font-size: 12px; padding: 7px 12px; cursor: pointer;
@@ -275,17 +277,25 @@ let captured = [];
 async function checkCookiesStatus() {
   try {
     const res = await fetch('/cookies-status');
-    const { hasCookies } = await res.json();
+    const data = await res.json();
     const badge = document.getElementById('cookies-status-badge');
     const howto = document.getElementById('cookies-howto');
-    if (hasCookies) {
-      badge.className = 'cookies-badge-ok';
-      badge.textContent = '✅ พร้อมใช้งาน';
-      howto.style.display = 'none';
-    } else {
+    if (!data.hasCookies) {
       badge.className = 'cookies-badge-none';
       badge.textContent = 'ยังไม่ได้ตั้งค่า';
       howto.style.display = 'block';
+    } else if (data.expired) {
+      badge.className = 'cookies-badge-expired';
+      badge.textContent = '⚠️ cookies หมดอายุ — กรุณาอัปโหลดใหม่';
+      howto.style.display = 'block';
+    } else if (data.soonNames && data.soonNames.length > 0) {
+      badge.className = 'cookies-badge-soon';
+      badge.textContent = '⏳ cookies ใกล้หมดอายุ (ภายใน 7 วัน)';
+      howto.style.display = 'none';
+    } else {
+      badge.className = 'cookies-badge-ok';
+      badge.textContent = '✅ พร้อมใช้งาน';
+      howto.style.display = 'none';
     }
   } catch {}
 }
@@ -301,6 +311,9 @@ async function uploadCookies(input) {
     const json = await res.json();
     if (!res.ok || json.error) { showError(json.error); return; }
     hideError();
+    if (json.expired) {
+      showError('⚠️ cookies ที่อัปโหลดมี session หมดอายุแล้ว (' + json.expiredNames.join(', ') + ') — กรุณา export cookies ใหม่จาก browser');
+    }
     checkCookiesStatus();
   } catch (err) {
     showError('อัปโหลด cookies ไม่ได้: ' + err.message);

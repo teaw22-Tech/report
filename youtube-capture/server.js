@@ -27,12 +27,33 @@ app.post('/upload-cookies', upload.single('cookies'), async (req, res) => {
   if (!text.includes('youtube.com')) return res.status(400).json({ error: 'ไม่ใช่ไฟล์ cookies ของ YouTube' });
   cookiesContent = text;
   parsedCookies = parseNetscapeCookies(text);
-  res.json({ ok: true, count: parsedCookies.length });
+  const { expired, expiredNames } = checkCookiesExpiry(parsedCookies);
+  res.json({ ok: true, count: parsedCookies.length, expired, expiredNames });
 });
 
 app.get('/cookies-status', (req, res) => {
-  res.json({ hasCookies: parsedCookies.length > 0 });
+  if (parsedCookies.length === 0) return res.json({ hasCookies: false });
+  const { expired, expiredNames, soonNames } = checkCookiesExpiry(parsedCookies);
+  res.json({ hasCookies: true, expired, expiredNames, soonNames });
 });
+
+// Check if key session cookies are expired
+function checkCookiesExpiry(cookies) {
+  const now = Math.floor(Date.now() / 1000);
+  const KEY_COOKIES = ['SAPISID', 'SSID', 'SID', 'HSID', '__Secure-3PSID', '__Secure-1PSID'];
+  const expiredNames = [];
+  const soonNames = []; // expire within 7 days
+  for (const c of cookies) {
+    if (c.expires && c.expires > 0) {
+      if (c.expires < now) {
+        if (KEY_COOKIES.includes(c.name)) expiredNames.push(c.name);
+      } else if (c.expires < now + 7 * 86400) {
+        if (KEY_COOKIES.includes(c.name)) soonNames.push(c.name);
+      }
+    }
+  }
+  return { expired: expiredNames.length > 0, expiredNames, soonNames };
+}
 
 // Parse Netscape cookies.txt → Playwright cookie objects
 function parseNetscapeCookies(text) {
