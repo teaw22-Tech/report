@@ -1,5 +1,6 @@
 const express = require('express');
 const { chromium } = require('playwright');
+const PptxGenJS = require('pptxgenjs');
 const path = require('path');
 
 const app = express();
@@ -10,8 +11,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 let browser = null;
 let browserReady = false;
-let queue = 0;
-const MAX_QUEUE = 3;
+let isProcessing = false;
 
 async function getBrowser() {
   if (browser && browserReady) return browser;
@@ -24,7 +24,6 @@ async function getBrowser() {
       '--single-process',
       '--disable-blink-features=AutomationControlled',
       '--autoplay-policy=no-user-gesture-required',
-      '--disable-web-security',
       '--lang=th-TH',
     ],
   });
@@ -38,67 +37,41 @@ async function safeGetBrowser() {
   catch { browser = null; browserReady = false; return await getBrowser(); }
 }
 
-app.post('/capture', async (req, res) => {
-  const { url } = req.body;
-
-  if (!url || !isYouTubeUrl(url)) {
-    return res.status(400).json({ error: 'กรุณาใส่ YouTube URL ที่ถูกต้อง' });
-  }
-  if (queue >= MAX_QUEUE) {
-    return res.status(429).json({ error: `ระบบกำลังประมวลผล ${queue} คำขออยู่ กรุณารอสักครู่` });
-  }
-
-  queue++;
-  let page;
+async function captureOne(videoId) {
+  const b = await safeGetBrowser();
+  const page = await b.newPage();
   try {
-    const videoId = extractVideoId(url);
-    if (!videoId) throw new Error('ไม่พบ Video ID จาก URL นี้');
-
-    const b = await safeGetBrowser();
-    page = await b.newPage();
-
-    // Spoof real Chrome browser
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Upgrade-Insecure-Requests': '1',
     });
-
     await page.setViewportSize({ width: 1280, height: 720 });
-
-    // Deep spoof — remove all automation fingerprints
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
       Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US', 'en'] });
       window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {}, app: {} };
-      const origQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (params) =>
-        params.name === 'notifications'
-          ? Promise.resolve({ state: Notification.permission })
-          : origQuery(params);
     });
 
-    // Use clean URL — no extra params
-    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    await page.goto(watchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(`https://www.youtube.com/watch?v=${videoId}`, {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    });
 
-    // Dismiss consent/cookie popup
+    // Dismiss consent popup
     try {
-      const consentBtn = await page.waitForSelector(
-        'button[aria-label="Reject all"], tp-yt-paper-button#button[aria-label="Reject all"], .eom-button-row button:first-child',
+      const btn = await page.waitForSelector(
+        'button[aria-label="Reject all"], .eom-button-row button:first-child',
         { timeout: 3000 }
       );
-      if (consentBtn) { await consentBtn.click(); await page.waitForTimeout(800); }
+      if (btn) { await btn.click(); await page.waitForTimeout(600); }
     } catch { /* no popup */ }
 
-    // Click play if needed
+    // Click play
     try {
       await page.click('button.ytp-large-play-button', { timeout: 4000 });
-    } catch { /* autoplay or already playing */ }
+    } catch { /* autoplay */ }
 
-    // Wait for video element to be ready
+    // Wait for video ready
     await page.waitForFunction(() => {
       const v = document.querySelector('video');
       return v && v.readyState >= 2;
@@ -109,25 +82,111 @@ app.post('/capture', async (req, res) => {
       const v = document.querySelector('video');
       if (v) { v.currentTime = 5; v.play().catch(() => {}); }
     });
-
     await page.waitForTimeout(1500);
 
     const screenshot = await page.screenshot({ type: 'png' });
-    res.set('Content-Type', 'image/png');
-    res.set('Content-Disposition', 'inline; filename="youtube-capture.png"');
-    res.send(screenshot);
+    return { success: true, data: screenshot };
   } catch (err) {
-    console.error('Capture error:', err.message);
-    if (browser) { await browser.close().catch(() => {}); browser = null; browserReady = false; }
-    res.status(500).json({ error: 'ไม่สามารถแคปเจอร์ได้: ' + err.message });
+    return { success: false, error: err.message };
   } finally {
-    if (page) await page.close().catch(() => {});
-    queue--;
+    await page.close().catch(() => {});
+  }
+}
+
+// --- Capture multiple + export PowerPoint ---
+app.post('/capture-batch', async (req, res) => {
+  const { urls } = req.body;
+
+  if (!Array.isArray(urls) || urls.length === 0) {
+    return res.status(400).json({ error: 'กรุณาใส่ URL อย่างน้อย 1 รายการ' });
+  }
+  if (urls.length > 10) {
+    return res.status(400).json({ error: 'ใส่ได้สูงสุด 10 URL' });
+  }
+
+  const invalid = urls.filter(u => !isYouTubeUrl(u));
+  if (invalid.length > 0) {
+    return res.status(400).json({ error: `URL ไม่ถูกต้อง: ${invalid[0]}` });
+  }
+
+  if (isProcessing) {
+    return res.status(429).json({ error: 'ระบบกำลังประมวลผลอยู่ กรุณารอสักครู่' });
+  }
+
+  isProcessing = true;
+  try {
+    const results = [];
+    for (const url of urls) {
+      const videoId = extractVideoId(url);
+      if (!videoId) { results.push({ url, success: false, error: 'ไม่พบ Video ID' }); continue; }
+      const result = await captureOne(videoId);
+      results.push({ url, videoId, ...result });
+    }
+
+    // Build PowerPoint — 16:9 slide per screenshot
+    const pptx = new PptxGenJS();
+    pptx.layout = 'LAYOUT_16x9';
+
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      const slide = pptx.addSlide();
+      slide.background = { color: '000000' };
+
+      if (r.success && r.data) {
+        const b64 = r.data.toString('base64');
+        slide.addImage({
+          data: `image/png;base64,${b64}`,
+          x: 0, y: 0, w: '100%', h: '100%',
+        });
+        // Small label bottom-left
+        slide.addText(`${i + 1}. youtu.be/${r.videoId}`, {
+          x: 0.1, y: 6.8, w: 9, h: 0.3,
+          fontSize: 9, color: 'ffffff', transparency: 40,
+        });
+      } else {
+        slide.addText(`❌ Slide ${i + 1}: ${r.error || 'capture failed'}\n${r.url}`, {
+          x: 0.5, y: 2.5, w: 9, h: 2,
+          fontSize: 14, color: 'ff6b6b', align: 'center',
+        });
+      }
+    }
+
+    const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.set('Content-Disposition', 'attachment; filename="youtube-captures.pptx"');
+    res.send(pptxBuffer);
+  } catch (err) {
+    console.error('Batch error:', err.message);
+    if (browser) { await browser.close().catch(() => {}); browser = null; browserReady = false; }
+    res.status(500).json({ error: err.message });
+  } finally {
+    isProcessing = false;
+  }
+});
+
+// Single capture (keep for compatibility)
+app.post('/capture', async (req, res) => {
+  const { url } = req.body;
+  if (!url || !isYouTubeUrl(url)) return res.status(400).json({ error: 'กรุณาใส่ YouTube URL ที่ถูกต้อง' });
+  if (isProcessing) return res.status(429).json({ error: 'ระบบกำลังประมวลผลอยู่' });
+
+  isProcessing = true;
+  try {
+    const videoId = extractVideoId(url);
+    if (!videoId) throw new Error('ไม่พบ Video ID');
+    const result = await captureOne(videoId);
+    if (!result.success) throw new Error(result.error);
+    res.set('Content-Type', 'image/png');
+    res.send(result.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    isProcessing = false;
   }
 });
 
 app.get('/status', (req, res) => {
-  res.json({ status: 'ok', browserReady, queue, maxQueue: MAX_QUEUE });
+  res.json({ status: 'ok', browserReady, isProcessing });
 });
 
 function isYouTubeUrl(url) {
