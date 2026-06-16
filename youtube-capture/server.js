@@ -97,39 +97,54 @@ async function captureFrame(url) {
       window.chrome = { runtime: {} };
     });
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
 
     // Dismiss consent/cookie popup
     try {
       await page.click('button[aria-label="Reject all"]', { timeout: 3000 });
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(800);
     } catch {}
 
-    // Click play button if present
+    // Click play button
     try {
       await page.click('button.ytp-large-play-button', { timeout: 5000 });
     } catch {}
 
-    // Wait for video element
-    await page.waitForFunction(() => {
+    // Wait for video to have data AND be playing
+    const videoReady = await page.waitForFunction(() => {
       const v = document.querySelector('video');
-      return v && v.readyState >= 2;
-    }, { timeout: 20000 }).catch(() => {});
+      return v && v.readyState >= 3 && v.videoWidth > 0;
+    }, { timeout: 25000 }).catch(() => null);
 
-    // Seek to second 5
+    if (!videoReady) {
+      // Check if there's an error on the page
+      const errMsg = await page.evaluate(() => {
+        const el = document.querySelector('.ytp-error-content-wrap-reason, .ytp-error-message');
+        return el ? el.textContent.trim() : null;
+      });
+      if (errMsg) throw new Error(`YouTube error: ${errMsg}`);
+    }
+
+    // Seek to second 5 and wait for frame to render
     await page.evaluate(() => {
       const v = document.querySelector('video');
       if (v) { v.muted = true; v.currentTime = 5; v.play().catch(() => {}); }
     });
 
-    await page.waitForTimeout(1500);
+    // Wait for frame at second 5 to actually render (not black/white)
+    await page.waitForFunction(() => {
+      const v = document.querySelector('video');
+      return v && Math.abs(v.currentTime - 5) < 2 && !v.paused;
+    }, { timeout: 8000 }).catch(() => {});
 
-    // Crop to video element only (removes YouTube UI chrome)
+    await page.waitForTimeout(1000);
+
+    // Crop to video element only
     const videoEl = await page.$('video');
     let screenshot;
     if (videoEl) {
       const box = await videoEl.boundingBox();
-      if (box && box.width > 100 && box.height > 100) {
+      if (box && box.width > 200 && box.height > 100) {
         screenshot = await page.screenshot({
           type: 'png',
           clip: { x: box.x, y: box.y, width: box.width, height: box.height },
@@ -159,6 +174,10 @@ app.post('/capture-single', async (req, res) => {
     const result = await captureFrame(url);
     if (!result.success) return res.status(500).json({ error: result.error });
     res.json({ image: result.data.toString('base64') });
+  } catch (err) {
+    console.error('capture-single error:', err.message);
+    // Always return JSON even on unexpected crash
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   } finally {
     isProcessing = false;
   }
