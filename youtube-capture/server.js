@@ -192,6 +192,14 @@ async function captureFrame(url) {
     });
 
     // Wait for video to have decoded frame data (readyState >= 2 means HAVE_CURRENT_DATA)
+    const videoState = await page.evaluate(() => {
+      const v = document.querySelector('video');
+      if (!v) return { found: false };
+      return { found: true, readyState: v.readyState, videoWidth: v.videoWidth, videoHeight: v.videoHeight, currentTime: v.currentTime, networkState: v.networkState, paused: v.paused, error: v.error?.code };
+    });
+    console.log('Video state:', JSON.stringify(videoState));
+    console.log('Page title:', await page.title());
+
     await page.waitForFunction(() => {
       const v = document.querySelector('video');
       return v && v.readyState >= 2 && v.videoWidth > 0;
@@ -211,16 +219,19 @@ async function captureFrame(url) {
     let frameBase64 = null;
 
     if (videoEl) {
-      // Check if video has actual frame data
       const hasFrame = await page.evaluate(() => {
         const v = document.querySelector('video');
         return v && v.videoWidth > 0 && v.videoHeight > 0 && v.readyState >= 2;
       });
-
+      console.log('Has frame:', hasFrame);
       if (hasFrame) {
-        // Screenshot the video element directly (Playwright renders actual decoded frame)
         const buf = await videoEl.screenshot({ type: 'png' });
         frameBase64 = buf.toString('base64');
+      } else {
+        // Debug: take full page screenshot to see what YouTube is actually showing
+        const debugBuf = await page.screenshot({ type: 'png', fullPage: false });
+        frameBase64 = debugBuf.toString('base64');
+        console.log('Fallback: returning full page screenshot for debug');
       }
     }
 
