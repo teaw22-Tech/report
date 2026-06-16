@@ -372,7 +372,7 @@ app.post('/build-pptx', async (req, res) => {
       });
       slide.addText(url, {
         x: RX + 0.12, y: RY + 1.38, w: RW - 0.2, h: 1.5,
-        fontSize: 7, color: '96B4E6',
+        fontSize: 5, color: '96B4E6',
         wrap: true, hyperlink: { url },
       });
 
