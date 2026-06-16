@@ -36,30 +36,36 @@ app.get('/cookies-status', (req, res) => {
 
 // Parse Netscape cookies.txt → Playwright cookie objects
 function parseNetscapeCookies(text) {
-  return text.split('\n')
-    .filter(l => l && !l.startsWith('#') && l.includes('youtube.com'))
-    .map(l => {
-      const p = l.split('\t');
-      if (p.length < 7) return null;
-      return {
-        domain: p[0],
-        path: p[2],
-        secure: p[3] === 'TRUE',
-        expires: parseInt(p[4]) || -1,
-        name: p[5],
-        value: p[6].trim(),
-        httpOnly: false,
-        sameSite: 'None',
-      };
-    })
-    .filter(Boolean);
+  const cookies = [];
+  for (const line of text.split('\n')) {
+    const l = line.trim();
+    if (!l || l.startsWith('#')) continue;
+    const p = l.split('\t');
+    if (p.length < 7) continue;
+    const domain = p[0].trim();
+    if (!domain.includes('youtube.com') && !domain.includes('google.com')) continue;
+    const expires = parseInt(p[4]);
+    cookies.push({
+      domain,
+      path: p[2] || '/',
+      secure: p[3] === 'TRUE',
+      expires: isNaN(expires) ? -1 : expires,
+      name: p[5].trim(),
+      value: p[6].trim(),
+      httpOnly: false,
+      sameSite: 'None',
+    });
+  }
+  console.log(`Parsed ${cookies.length} cookies`);
+  return cookies;
 }
 
 // ── Browser pool ──────────────────────────────────────────────
 let browser = null;
 
 async function getBrowser() {
-  if (browser) return browser;
+  if (browser && browser.isConnected()) return browser;
+  browser = null;
   browser = await chromium.launch({
     args: [
       '--no-sandbox', '--disable-setuid-sandbox',
@@ -67,6 +73,7 @@ async function getBrowser() {
       '--single-process',
       '--disable-blink-features=AutomationControlled',
       '--autoplay-policy=no-user-gesture-required',
+      '--disable-features=IsolateOrigins,site-per-process',
     ],
   });
   browser.on('disconnected', () => { browser = null; });
@@ -75,80 +82,92 @@ async function getBrowser() {
 
 // ── Capture frame ─────────────────────────────────────────────
 async function captureFrame(url) {
-  const b = await getBrowser();
+  let b;
+  try { b = await getBrowser(); }
+  catch (e) { return { success: false, error: 'Browser launch failed: ' + e.message }; }
 
-  // Create context with cookies injected
   const ctx = await b.newContext({
     viewport: { width: 1280, height: 720 },
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     locale: 'th-TH',
-    extraHTTPHeaders: { 'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8' },
+    timezoneId: 'Asia/Bangkok',
+    extraHTTPHeaders: {
+      'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
+    },
   });
 
+  // Inject cookies BEFORE opening page
   if (parsedCookies.length > 0) {
-    await ctx.addCookies(parsedCookies);
+    try {
+      await ctx.addCookies(parsedCookies);
+      console.log(`Injected ${parsedCookies.length} cookies`);
+    } catch (e) {
+      console.error('Cookie inject error:', e.message);
+    }
+  } else {
+    console.warn('No cookies available — bot detection likely');
   }
 
   const page = await ctx.newPage();
 
   try {
+    // Deep anti-detection
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      window.chrome = { runtime: {} };
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+      Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US'] });
+      window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
+      const origQuery = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = (p) =>
+        p.name === 'notifications' ? Promise.resolve({ state: 'denied' }) : origQuery(p);
     });
 
+    console.log(`Navigating to: ${url}`);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
 
-    // Dismiss consent/cookie popup
+    // Dismiss consent popup
     try {
       await page.click('button[aria-label="Reject all"]', { timeout: 3000 });
       await page.waitForTimeout(800);
     } catch {}
 
-    // Click play button
-    try {
-      await page.click('button.ytp-large-play-button', { timeout: 5000 });
-    } catch {}
+    // Check if bot-detection page appeared
+    const isBot = await page.evaluate(() => {
+      const body = document.body?.innerText || '';
+      return body.includes('ยืนยันว่าคุณไม่ใช่บอต') || body.includes("you're not a bot") || body.includes('confirm you');
+    });
+    if (isBot) throw new Error('YouTube bot detection — กรุณาอัปโหลด cookies.txt ใหม่จาก browser ที่ login แล้ว');
 
-    // Wait for video to have data AND be playing
-    const videoReady = await page.waitForFunction(() => {
+    // Click play
+    try { await page.click('button.ytp-large-play-button', { timeout: 5000 }); } catch {}
+
+    // Wait for video with actual frame data
+    await page.waitForFunction(() => {
       const v = document.querySelector('video');
       return v && v.readyState >= 3 && v.videoWidth > 0;
-    }, { timeout: 25000 }).catch(() => null);
+    }, { timeout: 25000 }).catch(() => {});
 
-    if (!videoReady) {
-      // Check if there's an error on the page
-      const errMsg = await page.evaluate(() => {
-        const el = document.querySelector('.ytp-error-content-wrap-reason, .ytp-error-message');
-        return el ? el.textContent.trim() : null;
-      });
-      if (errMsg) throw new Error(`YouTube error: ${errMsg}`);
-    }
-
-    // Seek to second 5 and wait for frame to render
+    // Seek to second 5
     await page.evaluate(() => {
       const v = document.querySelector('video');
       if (v) { v.muted = true; v.currentTime = 5; v.play().catch(() => {}); }
     });
 
-    // Wait for frame at second 5 to actually render (not black/white)
     await page.waitForFunction(() => {
       const v = document.querySelector('video');
-      return v && Math.abs(v.currentTime - 5) < 2 && !v.paused;
+      return v && v.currentTime >= 4.5;
     }, { timeout: 8000 }).catch(() => {});
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1200);
 
-    // Crop to video element only
+    // Crop to video element
     const videoEl = await page.$('video');
     let screenshot;
     if (videoEl) {
       const box = await videoEl.boundingBox();
       if (box && box.width > 200 && box.height > 100) {
-        screenshot = await page.screenshot({
-          type: 'png',
-          clip: { x: box.x, y: box.y, width: box.width, height: box.height },
-        });
+        screenshot = await page.screenshot({ type: 'png',
+          clip: { x: box.x, y: box.y, width: box.width, height: box.height } });
       }
     }
     if (!screenshot) screenshot = await page.screenshot({ type: 'png' });
@@ -156,6 +175,8 @@ async function captureFrame(url) {
     return { success: true, data: screenshot };
   } catch (err) {
     console.error('captureFrame error:', err.message);
+    // Kill browser on error so next request gets fresh one
+    if (browser) { await browser.close().catch(() => {}); browser = null; }
     return { success: false, error: err.message };
   } finally {
     await page.close().catch(() => {});
