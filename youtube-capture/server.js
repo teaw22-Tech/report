@@ -153,16 +153,28 @@ async function captureFrame(url) {
         p.name === 'notifications' ? Promise.resolve({ state: 'denied' }) : origQuery(p);
     });
 
-    console.log(`Navigating to: ${url}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
+    // Try original URL first, then fall back to clean URL if bot detected
+    const urlsToTry = [url];
+    const cleanUrl = getCleanVideoUrl(url);
+    if (cleanUrl && cleanUrl !== url) urlsToTry.push(cleanUrl);
 
-    // Dismiss consent popup quickly
-    try { await page.click('button[aria-label="Reject all"]', { timeout: 2000 }); } catch {}
+    let navigated = false;
+    for (const tryUrl of urlsToTry) {
+      console.log(`Navigating to: ${tryUrl}`);
+      await page.goto(tryUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      try { await page.click('button[aria-label="Reject all"]', { timeout: 2000 }); } catch {}
+      await page.waitForTimeout(1500);
 
-    // Let page render for 2 seconds max then try video
-    await page.waitForTimeout(2000);
+      const isBot = await page.evaluate(() => {
+        const body = document.body?.innerText || '';
+        return body.includes('ยืนยันว่าคุณไม่ใช่บอต') || body.includes("not a bot") || body.includes('confirm you');
+      });
+      console.log(`Bot detected on ${tryUrl}:`, isBot);
+      if (!isBot) { navigated = true; break; }
+      // Bot detected on this URL — try next URL (clean URL)
+    }
 
-    // Check video state immediately
+    // Check video state
     const videoState = await page.evaluate(() => {
       const v = document.querySelector('video');
       if (!v) return { found: false, readyState: 0, videoWidth: 0 };
@@ -170,7 +182,7 @@ async function captureFrame(url) {
       v.play().catch(() => {});
       return { found: true, readyState: v.readyState, videoWidth: v.videoWidth, networkState: v.networkState };
     });
-    console.log('Video state after 2s:', JSON.stringify(videoState));
+    console.log('Video state:', JSON.stringify(videoState), 'navigated ok:', navigated);
 
     let frameBase64 = null;
 
@@ -466,6 +478,16 @@ function isYouTubeUrl(url) {
     const u = new URL(url);
     return ['www.youtube.com', 'youtube.com', 'youtu.be'].includes(u.hostname);
   } catch { return false; }
+}
+
+// Extract plain watch URL without force_ad_encrypted (for public video fallback)
+function getCleanVideoUrl(url) {
+  try {
+    const u = new URL(url);
+    const v = u.searchParams.get('v');
+    if (!v) return null;
+    return `https://www.youtube.com/watch?v=${v}`;
+  } catch { return null; }
 }
 
 app.listen(PORT, () => {
