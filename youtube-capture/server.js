@@ -1,129 +1,81 @@
 const express = require('express');
-const { chromium } = require('playwright');
-const PptxGenJS = require('pptxgenjs');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const { mkdtemp, readFile, rm } = require('fs/promises');
 const path = require('path');
+const os = require('os');
+const PptxGenJS = require('pptxgenjs');
 
+const execFileAsync = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-let browser = null;
-let browserReady = false;
 let isProcessing = false;
 
-async function getBrowser() {
-  if (browser && browserReady) return browser;
-  browser = await chromium.launch({
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--single-process',
-      '--disable-blink-features=AutomationControlled',
-      '--autoplay-policy=no-user-gesture-required',
-      '--lang=th-TH',
-    ],
-  });
-  browserReady = true;
-  browser.on('disconnected', () => { browser = null; browserReady = false; });
-  return browser;
-}
-
-async function safeGetBrowser() {
-  try { return await getBrowser(); }
-  catch { browser = null; browserReady = false; return await getBrowser(); }
-}
-
-async function captureOne(videoId) {
-  const b = await safeGetBrowser();
-  const page = await b.newPage();
+// Capture a single frame at second 5 using yt-dlp + ffmpeg
+async function captureFrame(url) {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ytcap-'));
+  const outPath = path.join(tmpDir, 'frame.png');
   try {
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    });
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-      Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US', 'en'] });
-      window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {}, app: {} };
-    });
+    // Step 1: get direct video stream URL from yt-dlp
+    const { stdout } = await execFileAsync('yt-dlp', [
+      '--get-url',
+      '-f', 'best[ext=mp4]/best',
+      '--no-playlist',
+      url,
+    ], { timeout: 30000 });
 
-    await page.goto(`https://www.youtube.com/watch?v=${videoId}`, {
-      waitUntil: 'domcontentloaded', timeout: 30000,
-    });
+    const streamUrl = stdout.trim().split('\n')[0];
+    if (!streamUrl) throw new Error('yt-dlp ไม่สามารถดึง stream URL ได้');
 
-    // Dismiss consent popup
-    try {
-      const btn = await page.waitForSelector(
-        'button[aria-label="Reject all"], .eom-button-row button:first-child',
-        { timeout: 3000 }
-      );
-      if (btn) { await btn.click(); await page.waitForTimeout(600); }
-    } catch { /* no popup */ }
+    // Step 2: use ffmpeg to extract frame at second 5
+    await execFileAsync('ffmpeg', [
+      '-ss', '5',
+      '-i', streamUrl,
+      '-vframes', '1',
+      '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black',
+      '-y',
+      outPath,
+    ], { timeout: 60000 });
 
-    // Click play
-    try {
-      await page.click('button.ytp-large-play-button', { timeout: 4000 });
-    } catch { /* autoplay */ }
-
-    // Wait for video ready
-    await page.waitForFunction(() => {
-      const v = document.querySelector('video');
-      return v && v.readyState >= 2;
-    }, { timeout: 15000 }).catch(() => {});
-
-    // Seek to second 5
-    await page.evaluate(() => {
-      const v = document.querySelector('video');
-      if (v) { v.currentTime = 5; v.play().catch(() => {}); }
-    });
-    await page.waitForTimeout(1500);
-
-    const screenshot = await page.screenshot({ type: 'png' });
-    return { success: true, data: screenshot };
+    const data = await readFile(outPath);
+    return { success: true, data };
   } catch (err) {
     return { success: false, error: err.message };
   } finally {
-    await page.close().catch(() => {});
+    await rm(tmpDir, { recursive: true, force: true });
   }
 }
 
-// --- Capture multiple + export PowerPoint ---
+// Batch capture → PowerPoint
 app.post('/capture-batch', async (req, res) => {
   const { urls } = req.body;
 
-  if (!Array.isArray(urls) || urls.length === 0) {
+  if (!Array.isArray(urls) || urls.length === 0)
     return res.status(400).json({ error: 'กรุณาใส่ URL อย่างน้อย 1 รายการ' });
-  }
-  if (urls.length > 10) {
+  if (urls.length > 10)
     return res.status(400).json({ error: 'ใส่ได้สูงสุด 10 URL' });
-  }
 
   const invalid = urls.filter(u => !isYouTubeUrl(u));
-  if (invalid.length > 0) {
+  if (invalid.length > 0)
     return res.status(400).json({ error: `URL ไม่ถูกต้อง: ${invalid[0]}` });
-  }
 
-  if (isProcessing) {
+  if (isProcessing)
     return res.status(429).json({ error: 'ระบบกำลังประมวลผลอยู่ กรุณารอสักครู่' });
-  }
 
   isProcessing = true;
   try {
     const results = [];
     for (const url of urls) {
-      const videoId = extractVideoId(url);
-      if (!videoId) { results.push({ url, success: false, error: 'ไม่พบ Video ID' }); continue; }
-      const result = await captureOne(videoId);
-      results.push({ url, videoId, ...result });
+      console.log('Capturing:', url);
+      const result = await captureFrame(url);
+      results.push({ url, ...result });
     }
 
-    // Build PowerPoint — 16:9 slide per screenshot
+    // Build PowerPoint
     const pptx = new PptxGenJS();
     pptx.layout = 'LAYOUT_16x9';
 
@@ -133,48 +85,45 @@ app.post('/capture-batch', async (req, res) => {
       slide.background = { color: '000000' };
 
       if (r.success && r.data) {
-        const b64 = r.data.toString('base64');
         slide.addImage({
-          data: `image/png;base64,${b64}`,
+          data: `image/png;base64,${r.data.toString('base64')}`,
           x: 0, y: 0, w: '100%', h: '100%',
         });
-        // Small label bottom-left
-        slide.addText(`${i + 1}. youtu.be/${r.videoId}`, {
-          x: 0.1, y: 6.8, w: 9, h: 0.3,
-          fontSize: 9, color: 'ffffff', transparency: 40,
+        slide.addText(`${i + 1}. ${r.url}`, {
+          x: 0.1, y: 6.8, w: 9.8, h: 0.3,
+          fontSize: 8, color: 'ffffff', transparency: 50,
         });
       } else {
-        slide.addText(`❌ Slide ${i + 1}: ${r.error || 'capture failed'}\n${r.url}`, {
-          x: 0.5, y: 2.5, w: 9, h: 2,
-          fontSize: 14, color: 'ff6b6b', align: 'center',
+        slide.addText(`❌ Slide ${i + 1}\n${r.error || 'capture failed'}\n\n${r.url}`, {
+          x: 0.5, y: 2.2, w: 9, h: 2.5,
+          fontSize: 13, color: 'ff6b6b', align: 'center', breakLine: true,
         });
       }
     }
 
-    const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+    const buf = await pptx.write({ outputType: 'nodebuffer' });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
     res.set('Content-Disposition', 'attachment; filename="youtube-captures.pptx"');
-    res.send(pptxBuffer);
+    res.send(buf);
   } catch (err) {
     console.error('Batch error:', err.message);
-    if (browser) { await browser.close().catch(() => {}); browser = null; browserReady = false; }
     res.status(500).json({ error: err.message });
   } finally {
     isProcessing = false;
   }
 });
 
-// Single capture (keep for compatibility)
+// Single capture → PNG
 app.post('/capture', async (req, res) => {
   const { url } = req.body;
-  if (!url || !isYouTubeUrl(url)) return res.status(400).json({ error: 'กรุณาใส่ YouTube URL ที่ถูกต้อง' });
-  if (isProcessing) return res.status(429).json({ error: 'ระบบกำลังประมวลผลอยู่' });
+  if (!url || !isYouTubeUrl(url))
+    return res.status(400).json({ error: 'กรุณาใส่ YouTube URL ที่ถูกต้อง' });
+  if (isProcessing)
+    return res.status(429).json({ error: 'ระบบกำลังประมวลผลอยู่' });
 
   isProcessing = true;
   try {
-    const videoId = extractVideoId(url);
-    if (!videoId) throw new Error('ไม่พบ Video ID');
-    const result = await captureOne(videoId);
+    const result = await captureFrame(url);
     if (!result.success) throw new Error(result.error);
     res.set('Content-Type', 'image/png');
     res.send(result.data);
@@ -186,7 +135,7 @@ app.post('/capture', async (req, res) => {
 });
 
 app.get('/status', (req, res) => {
-  res.json({ status: 'ok', browserReady, isProcessing });
+  res.json({ status: 'ok', isProcessing });
 });
 
 function isYouTubeUrl(url) {
@@ -196,15 +145,4 @@ function isYouTubeUrl(url) {
   } catch { return false; }
 }
 
-function extractVideoId(url) {
-  try {
-    const u = new URL(url);
-    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('?')[0];
-    return u.searchParams.get('v');
-  } catch { return null; }
-}
-
-app.listen(PORT, () => {
-  console.log(`YouTube Capture running on port ${PORT}`);
-  safeGetBrowser().then(() => console.log('Browser ready')).catch(console.error);
-});
+app.listen(PORT, () => console.log(`YouTube Capture running on port ${PORT}`));
