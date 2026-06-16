@@ -137,14 +137,20 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
   <div class="panel active" id="panelClient">
     <div class="share-hint" id="shareHint">
       <b>วิธีใช้งาน My Browser Capture (YouTube เท่านั้น):</b><br>
-      1️⃣ เลือกไฟล์ Excel ที่มี URL ของ YouTube → กด <b>โหลดรายการ</b> (สูงสุด 10 รายการ)<br>
-      2️⃣ ตั้งเวลารอต่อ URL (แนะนำ 15+ วินาทีสำหรับ YouTube) → กด <b>เริ่ม Capture</b><br>
-      3️⃣ เมื่อถูกถามให้แชร์หน้าจอ → เลือก <b>Entire Screen</b> → กด <b>Share</b><br>
-      4️⃣ <b>อย่าคลิกอะไร!</b> หน้าต่างโฆษณาจะเปลี่ยน URL ให้เองอัตโนมัติ → ดาวน์โหลด PPTX
+      1️⃣ <a href="/api/template" style="color:#1D9E75">⬇ ดาวน์โหลด Excel Template</a> → กรอก URL YouTube → กด <b>โหลดรายการ</b><br>
+      2️⃣ ตั้งเวลารอต่อ URL (แนะนำ 15+ วินาที) → กด <b>เริ่ม Capture</b><br>
+      3️⃣ หน้าต่าง <b>"Ads Display"</b> จะเปิดขึ้น → เมื่อถูกถามให้แชร์ → เลือก <b>Chrome Tab → "Ads Display"</b> → กด Share<br>
+      4️⃣ <b>อย่าคลิกอะไร!</b> ระบบเปลี่ยน URL ให้เองอัตโนมัติ → ดาวน์โหลด PPTX
     </div>
 
     <!-- Step A: เลือกไฟล์ -->
     <div id="phaseUpload">
+      <div style="margin-bottom:10px">
+        <a href="/api/template" download style="display:inline-flex;align-items:center;gap:6px;background:rgba(29,158,117,.1);border:1px solid rgba(29,158,117,.4);border-radius:8px;padding:8px 16px;color:#1D9E75;text-decoration:none;font-size:13px;font-weight:600">
+          ⬇ ดาวน์โหลด Excel Template
+        </a>
+        <span style="font-size:12px;color:var(--muted);margin-left:10px">กรอก URL YouTube แล้ว Upload</span>
+      </div>
       <div class="field">
         <label>ไฟล์ Excel (.xlsx) — สูงสุด 10 รายการต่อการรัน</label>
         <input type="file" id="excelClient" accept=".xlsx,.xls">
@@ -177,7 +183,7 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
     </div>
     <div class="step" id="s2">
       <div class="step-icon">2️⃣</div>
-      <div class="step-text">เลือก <b>"Entire Screen"</b> → กด Share → <b>อย่าคลิกอะไร!</b><div class="step-sub" id="s2sub"></div></div>
+      <div class="step-text">เลือก Chrome Tab → <b>"Ads Display"</b> → กด Share<div class="step-sub" id="s2sub"></div></div>
     </div>
     <div class="step" id="s3">
       <div class="step-icon">3️⃣</div>
@@ -350,32 +356,32 @@ async function startClientCapture() {
   try {
     stepDone('s1', `${ads.length} รายการ (พร้อม)`);
 
-    // ── STEP 2: ขอ share screen ก่อน แล้วค่อยเปิด popup เต็มจอ ────────────────
-    stepActive('s2', '🔴 เลือก "Entire Screen" → กด Share');
-    try {
-      captureStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 2, width: { ideal: sw }, height: { ideal: sh } },
-        audio: false,
-      });
-    } catch (err) {
-      stepError('s2', 'ยกเลิกการแชร์ — กรุณาลองใหม่ แล้วเลือก "Entire Screen" → Share');
-      return resetClientUI();
-    }
-
-    // เปิด popup และย้าย main window ออกนอกจอ เพื่อให้ popup อยู่หน้าสุด
-    displayWin = window.open('/display.html', 'AdsDisplay',
-      `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no,scrollbars=no`);
+    // ── STEP 2: เปิด display tab ก่อน แล้วให้ user เลือก tab นั้น ─────────────
+    // เปิด Ads Display เป็น tab ใหม่ (ไม่ใช่ popup) ก่อน getDisplayMedia
+    // เพื่อให้ user เห็น tab ชื่อ "Ads Display" ในหน้าต่าง share dialog
+    stepActive('s2', '⏳ เปิด Ads Display tab...');
+    displayWin = window.open('/display.html', '_blank');
     if (!displayWin) {
-      captureStream.getTracks().forEach(t => t.stop());
       stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup ที่ address bar แล้วลองใหม่');
       return resetClientUI();
     }
-    // ย้าย main window ออกนอกจอ ป้องกันบัง popup
-    try { window.moveTo(sw * 2, 0); } catch(_) {}
-    // ขยาย popup เต็มจอ
-    try { displayWin.moveTo(0, 0); displayWin.resizeTo(sw, sh); } catch(_) {}
-    displayWin.focus();
-    await sleep(1500); // รอ popup และ display.html โหลด
+    await sleep(1200); // รอให้ tab โหลด display.html
+
+    // ขอ share screen — Tab capture ทำงานต่อเนื่องแม้ URL เปลี่ยน
+    stepActive('s2', '🔴 เลือก Chrome Tab → "Ads Display" → กด Share');
+    try {
+      captureStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser', frameRate: 2, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+    } catch (err) {
+      displayWin.close(); displayWin = null;
+      stepError('s2', 'ยกเลิกการแชร์ — กรุณาลองใหม่ แล้วเลือก Chrome Tab → "Ads Display"');
+      return resetClientUI();
+    }
+    // Focus display tab หลังจาก share dialog ปิด
+    try { displayWin.focus(); } catch(_) {}
+    await sleep(800);
 
     // Setup video element to pull frames from stream
     const video = document.createElement('video');
@@ -479,11 +485,10 @@ async function startClientCapture() {
         Math.round(((i + 1) / ads.length) * 90) + '%';
     }
 
-    // Stop stream และย้าย main window กลับ
+    // Stop stream
     captureStream.getTracks().forEach(t => t.stop());
     captureStream = null;
     if (displayWin) { displayWin.close(); displayWin = null; }
-    try { window.moveTo(0, 0); window.focus(); } catch(_) {}
 
     if (clientCancelled && results.every(r => !r.screenshotB64)) {
       stepError('s3', 'ยกเลิกทั้งหมด ไม่มีภาพส่ง');

@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const multer = require('multer');
 const basicAuth = require('express-basic-auth');
+const xlsx = require('xlsx');
 const { readAdsFromExcel, runCapture, buildPptx } = require('./lib/adcapture');
 
 const PORT = process.env.PORT || 3000;
@@ -153,6 +154,32 @@ app.post('/api/build-from-screenshots', express.json({ limit: '200mb' }), async 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Excel template download ─────────────────────────────────────────────────
+app.get('/api/template', (req, res) => {
+  const rows = [
+    { NAME: 'ตัวอย่าง Toyota Hilux', URL: 'https://www.youtube.com/watch?v=XXXXX01', TYPE: 'YouTube' },
+    { NAME: 'ตัวอย่าง Honda Civic',  URL: 'https://www.youtube.com/watch?v=XXXXX02', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+    { NAME: '', URL: '', TYPE: 'YouTube' },
+  ];
+  const ws = xlsx.utils.json_to_sheet(rows, { header: ['NAME', 'URL', 'TYPE'] });
+  ws['!cols'] = [{ wch: 30 }, { wch: 80 }, { wch: 15 }];
+  const wb = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(wb, ws, 'YouTube Ads');
+  const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.set({
+    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition': 'attachment; filename="Ads_Capture_Template.xlsx"',
+  });
+  res.send(buf);
 });
 
 app.listen(PORT, () => {
