@@ -1,0 +1,13 @@
+{
+  "name": "youtube-capture",
+  "version": "1.0.0",
+  "description": "Capture YouTube screenshot at 5 seconds",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "playwright": "^1.60.0"
+  }
+}
