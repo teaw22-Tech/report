@@ -5,86 +5,298 @@
 <title>Ads Display</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body {
-  background:#0d1117; color:#e6edf3;
-  font-family:system-ui,sans-serif;
-  height:100vh; overflow:hidden;
+body { background:#0d1117; color:#e6edf3; font-family:system-ui,sans-serif; min-height:100vh; }
+
+/* ─── idle ─── */
+#idleView {
+  display:flex; flex-direction:column; align-items:center;
+  justify-content:center; height:100vh; text-align:center;
 }
-.center {
-  position:absolute; top:45%; left:50%;
-  transform:translate(-50%,-50%);
-  text-align:center; padding:0 40px;
+/* ─── relay / popup ─── */
+#relayView {
+  display:flex; flex-direction:column; align-items:center;
+  justify-content:center; height:100vh; overflow:hidden;
 }
-.idle-icon { font-size:64px; margin-bottom:16px; display:block; }
-.num-badge { font-size:15px; color:#7d8590; margin-bottom:16px; letter-spacing:.05em; }
-.ad-name { font-size:32px; font-weight:800; color:#fff; margin-bottom:12px; line-height:1.2; }
-.ad-url { font-size:12px; color:#444d56; max-width:700px; word-break:break-all; line-height:1.5; margin:0 auto; }
-#cntBox {
+.r-cnt-box {
   position:fixed; bottom:28px; right:28px;
-  background:rgba(29,158,117,.12);
-  border:2px solid #1D9E75; border-radius:20px;
-  padding:18px 26px; text-align:center; min-width:120px;
+  background:rgba(29,158,117,.12); border:2px solid #1D9E75;
+  border-radius:20px; padding:18px 26px; text-align:center; min-width:120px;
 }
-#cntNum { font-size:64px; font-weight:900; color:#1D9E75; line-height:1; display:block; }
-#cntLbl { font-size:13px; color:#7d8590; margin-top:6px; }
-#totalBox { position:fixed; bottom:32px; left:28px; font-size:13px; color:#7d8590; line-height:1.6; }
+.r-cnt-num { font-size:64px; font-weight:900; color:#1D9E75; line-height:1; display:block; }
+.r-cnt-lbl { font-size:13px; color:#7d8590; margin-top:6px; }
+#r_total { position:fixed; bottom:32px; left:28px; font-size:13px; color:#7d8590; }
+/* ─── controller ─── */
+#ctrlView { padding:32px; max-width:860px; margin:0 auto; }
+.ctrl-header { font-size:22px; font-weight:800; color:#1D9E75; margin-bottom:20px; }
+.url-item {
+  background:#161b22; border-radius:8px; padding:12px 16px;
+  font-size:13px; margin-bottom:6px;
+  border-left:3px solid transparent; transition:border-color .2s;
+}
+.url-item .u-name { font-weight:600; }
+.url-item .u-url { font-size:11px; color:#7d8590; margin-top:2px; word-break:break-all; }
+.url-item.capturing { border-left-color:#1D9E75; background:#0e2118; }
+.url-item.done      { border-left-color:#238636; }
+.status-main { font-size:15px; font-weight:600; margin:16px 0 4px; }
+.status-sub  { font-size:13px; color:#7d8590; min-height:20px; }
+.btn-start {
+  background:#1D9E75; color:#fff; border:none; border-radius:8px;
+  padding:13px 28px; font-size:15px; font-weight:700; cursor:pointer;
+  margin-top:16px;
+}
+.btn-start:disabled { opacity:.5; cursor:not-allowed; }
+.btn-dl {
+  display:inline-block; background:#238636; color:#fff; border:none;
+  border-radius:8px; padding:13px 28px; font-size:15px; font-weight:700;
+  cursor:pointer; text-decoration:none; margin-top:16px;
+}
+.progress-bar { background:#21262d; border-radius:4px; height:6px; margin:14px 0; overflow:hidden; }
+.progress-fill { background:#1D9E75; height:100%; width:0; transition:width .4s; }
+.muted { color:#7d8590; }
+.green { color:#1D9E75; font-weight:700; }
 </style>
 </head>
 <body>
 
-<div class="center">
-  <span class="idle-icon" id="icon">📺</span>
-  <div class="num-badge" id="numBadge">Ads Capture Display</div>
-  <div class="ad-name" id="adName">พร้อมรับโฆษณา</div>
-  <div class="ad-url" id="adUrl">ระบบจะเปลี่ยน URL อัตโนมัติ</div>
+<!-- IDLE -->
+<div id="idleView">
+  <div style="font-size:64px;margin-bottom:16px">📺</div>
+  <div style="font-size:22px;font-weight:700;color:#1D9E75;margin-bottom:8px">Ads Capture Display</div>
+  <div style="font-size:14px;color:#7d8590">เปิดจาก Ads Capture เพื่อเริ่มใช้งาน</div>
 </div>
 
-<div id="cntBox">
-  <span id="cntNum">–</span>
-  <div id="cntLbl">รอเริ่ม</div>
+<!-- RELAY / POPUP (countdown then YouTube) -->
+<div id="relayView" style="display:none">
+  <div style="text-align:center;padding:0 40px">
+    <div id="r_badge" style="font-size:15px;color:#7d8590;margin-bottom:16px"></div>
+    <div id="r_name"  style="font-size:30px;font-weight:800;color:#fff;margin-bottom:10px"></div>
+    <div id="r_url"   style="font-size:11px;color:#444d56;max-width:700px;word-break:break-all;margin:0 auto"></div>
+  </div>
+  <div class="r-cnt-box">
+    <span class="r-cnt-num" id="r_cnt">–</span>
+    <div  class="r-cnt-lbl" id="r_lbl">รอเริ่ม</div>
+  </div>
+  <div id="r_total"></div>
 </div>
 
-<div id="totalBox"></div>
+<!-- CONTROLLER (drives capture sequence) -->
+<div id="ctrlView" style="display:none">
+  <div class="ctrl-header">📺 Ads Display — Controller</div>
+  <div class="progress-bar"><div class="progress-fill" id="prog"></div></div>
+  <div class="status-main" id="sMain">กำลังเตรียม...</div>
+  <div class="status-sub"  id="sSub"></div>
+  <div id="urlList"></div>
+  <div id="actions"></div>
+</div>
 
 <script>
-(function () {
-  var p = new URLSearchParams(location.search);
-  var goto      = p.get('goto');
-  var idx       = parseInt(p.get('idx')        || '0');
-  var total     = parseInt(p.get('total')      || '1');
-  var name      = p.get('name')                || 'โฆษณา';
-  var sec       = parseInt(p.get('sec')        || '3');
-  var totalwait = parseInt(p.get('totalwait')  || '0');
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  if (!goto) return;
+const p = new URLSearchParams(location.search);
+const gotoUrl = p.get('goto');
 
-  document.getElementById('icon').remove();
-  document.getElementById('numBadge').textContent = 'โฆษณาที่ ' + (idx + 1) + ' / ' + total;
-  document.getElementById('adName').textContent   = name;
-  document.getElementById('adUrl').textContent    = decodeURIComponent(goto);
-  document.getElementById('cntLbl').textContent   = 'วินาที';
+/* ═══════════════════════════════════════════════════════
+   RELAY / POPUP MODE  — countdown then navigate to YouTube
+   ═══════════════════════════════════════════════════════ */
+if (gotoUrl) {
+  document.getElementById('idleView').style.display = 'none';
+  document.getElementById('relayView').style.display = 'flex';
 
-  if (totalwait > 0) {
-    document.getElementById('totalBox').innerHTML =
-      '⏱ เหลืออีกประมาณ <b>' + totalwait + '</b> วินาที';
+  const idx      = parseInt(p.get('idx')       ||'0');
+  const total    = parseInt(p.get('total')     ||'1');
+  const name     = p.get('name')               ||'โฆษณา';
+  const sec      = parseInt(p.get('sec')       ||'3');
+  const totalwait= parseInt(p.get('totalwait') ||'0');
+
+  document.getElementById('r_badge').textContent = 'โฆษณาที่ '+(idx+1)+' / '+total;
+  document.getElementById('r_name').textContent  = name;
+  document.getElementById('r_url').textContent   = decodeURIComponent(gotoUrl);
+  document.getElementById('r_lbl').textContent   = 'วินาที';
+  if (totalwait>0)
+    document.getElementById('r_total').innerHTML = '⏱ เหลืออีก ~<b>'+totalwait+'</b>s';
+
+  let n = sec;
+  document.getElementById('r_cnt').textContent = n;
+  const t = setInterval(()=>{
+    n--;
+    if(n>0){ document.getElementById('r_cnt').textContent=n; }
+    else{
+      clearInterval(t);
+      document.getElementById('r_cnt').textContent='▶';
+      document.getElementById('r_lbl').textContent='กำลังเปิด...';
+      try{ window.opener&&window.opener.postMessage({type:'navigating',idx},'*'); }catch(_){}
+      setTimeout(()=>{ window.location.href=gotoUrl; },150);
+    }
+  },1000);
+
+/* ═══════════════════════════════════════════════════════
+   CONTROLLER MODE  — reads localStorage config, runs everything
+   ═══════════════════════════════════════════════════════ */
+} else {
+  let config=null;
+  try{ config=JSON.parse(localStorage.getItem('adsCapConfig')||'null'); }catch(_){}
+
+  if(config&&config.ads&&config.ads.length>0){
+    document.getElementById('idleView').style.display='none';
+    document.getElementById('ctrlView').style.display='block';
+    localStorage.removeItem('adsCapConfig');
+    runController(config).catch(e=>{
+      document.getElementById('sMain').textContent='❌ '+e.message;
+    });
+  }
+  // else: show idle
+}
+
+/* ─────────────────────────────────────────────────────── */
+async function runController(config){
+  const ads     = config.ads;
+  const sMain   = document.getElementById('sMain');
+  const sSub    = document.getElementById('sSub');
+  const prog    = document.getElementById('prog');
+  const urlList = document.getElementById('urlList');
+  const actions = document.getElementById('actions');
+
+  /* render URL list */
+  urlList.innerHTML='';
+  ads.forEach((ad,i)=>{
+    const el=document.createElement('div');
+    el.className='url-item'; el.id='item'+i;
+    el.innerHTML=`<div class="u-name">${i+1}. ${esc(ad.name)}</div>`
+      +`<div class="u-url">${esc(ad.url)}</div>`;
+    urlList.appendChild(el);
+  });
+
+  /* start button */
+  sMain.textContent='กด เริ่ม แล้วเลือก Entire Screen → Share';
+  const btn=document.createElement('button');
+  btn.className='btn-start'; btn.textContent='⚡ เริ่ม Capture';
+  actions.appendChild(btn);
+  await new Promise(res=>{ btn.onclick=()=>{ btn.disabled=true; res(); }; });
+
+  /* get display media */
+  sMain.textContent='⏳ รอให้แชร์หน้าจอ...';
+  const sw=screen.width, sh=screen.height;
+  let stream;
+  try{
+    stream=await navigator.mediaDevices.getDisplayMedia({
+      video:{ displaySurface:'monitor', frameRate:2,
+              width:{ideal:sw}, height:{ideal:sh} },
+      audio:false
+    });
+  }catch(e){
+    sMain.textContent='❌ ยกเลิกการแชร์ — กด เริ่ม ใหม่อีกครั้ง';
+    btn.disabled=false; return;
+  }
+  sMain.textContent='✅ เชื่อมต่อหน้าจอสำเร็จ';
+
+  /* setup video */
+  const video=document.createElement('video');
+  video.srcObject=stream; video.muted=true;
+  await new Promise(r=>{ video.onloadedmetadata=r; });
+  await video.play();
+  stream.getVideoTracks()[0].addEventListener('ended',()=>{
+    sMain.textContent='❌ หยุดแชร์หน้าจอก่อนกำหนด';
+  });
+
+  /* open popup (YouTube display) */
+  let popup=window.open('/display.html','AdsPopup',
+    `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no,scrollbars=no`);
+  if(popup){ try{ popup.moveTo(0,0); popup.resizeTo(sw,sh); }catch(_){} }
+  await sleep(1500);
+
+  const CDWN=3;
+  const results=[];
+
+  function remaining(from){
+    return ads.slice(from).reduce((s,a)=>s+(a.waitSec||10)+CDWN+1,0);
   }
 
-  var n = sec;
-  document.getElementById('cntNum').textContent = n;
+  for(let i=0;i<ads.length;i++){
+    const ad=ads[i];
+    const waitSec=ad.waitSec||10;
 
-  var timer = setInterval(function () {
-    n--;
-    if (n > 0) {
-      document.getElementById('cntNum').textContent = n;
+    /* highlight row */
+    document.querySelectorAll('.url-item').forEach(e=>e.classList.remove('capturing'));
+    const el=document.getElementById('item'+i);
+    if(el){ el.classList.add('capturing'); el.scrollIntoView({block:'nearest'}); }
+
+    /* navigate popup via relay */
+    const rem=remaining(i);
+    const relay='/display.html'
+      +'?goto='+encodeURIComponent(ad.url)
+      +'&idx='+i+'&total='+ads.length
+      +'&name='+encodeURIComponent(ad.name)
+      +'&sec='+CDWN+'&totalwait='+rem;
+
+    if(!popup||popup.closed){
+      popup=window.open(relay,'AdsPopup',
+        `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no,scrollbars=no`);
+      if(popup){ try{ popup.moveTo(0,0); popup.resizeTo(sw,sh); }catch(_){} }
     } else {
-      clearInterval(timer);
-      document.getElementById('cntNum').textContent = '▶';
-      document.getElementById('cntLbl').textContent = 'กำลังเปิด...';
-      try { window.opener && window.opener.postMessage({ type: 'navigating', idx: idx }, '*'); } catch (e) {}
-      setTimeout(function () { window.location.href = goto; }, 150);
+      popup.location.href=relay;      // กลับมา same-origin เสมอ → ทำงานได้แน่นอน
+      try{ popup.focus(); }catch(_){}
     }
-  }, 1000);
-})();
+
+    /* wait for display.html countdown (CDWN วินาที) */
+    for(let t=CDWN;t>0;t--){
+      sMain.textContent=`(${i+1}/${ads.length}) ${ad.name}`;
+      sSub.textContent=`⏳ Countdown ${t}s`;
+      await sleep(1000);
+    }
+    await sleep(700); // buffer รอ YouTube เริ่มโหลด
+
+    /* wait for YouTube to play */
+    for(let t=waitSec;t>0;t--){
+      sMain.textContent=`(${i+1}/${ads.length}) ${ad.name}`;
+      sSub.innerHTML=`📺 YouTube <span class="green">${t}</span>s  |  เหลือ ~${remaining(i)-(waitSec-t)}s`;
+      await sleep(1000);
+    }
+
+    /* capture frame */
+    sMain.textContent=`(${i+1}/${ads.length}) ${ad.name}`;
+    sSub.textContent='📸 ถ่ายภาพ...';
+    try{ popup?.focus(); }catch(_){}
+    await sleep(400);
+
+    const canvas=document.createElement('canvas');
+    canvas.width=video.videoWidth||1280;
+    canvas.height=video.videoHeight||720;
+    canvas.getContext('2d').drawImage(video,0,0);
+    results.push({...ad, screenshotB64:canvas.toDataURL('image/jpeg',0.85), status:'ok'});
+
+    if(el){ el.classList.remove('capturing'); el.classList.add('done'); }
+    prog.style.width=Math.round(((i+1)/ads.length)*90)+'%';
+  }
+
+  /* stop & close */
+  stream.getTracks().forEach(t=>t.stop());
+  if(popup&&!popup.closed) popup.close();
+
+  /* build PPTX */
+  sMain.textContent='⏳ กำลังสร้าง PowerPoint...';
+  sSub.textContent='';
+  try{
+    const res=await fetch('/api/build-from-screenshots',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ads:results})
+    });
+    const data=await res.json();
+    if(data.downloadUrl){
+      prog.style.width='100%';
+      sMain.textContent='✅ เสร็จสมบูรณ์! ดาวน์โหลดได้เลย';
+      sSub.textContent='';
+      actions.innerHTML=`<a class="btn-dl" href="${data.downloadUrl}">⬇ ดาวน์โหลด PowerPoint</a>`;
+      try{ window.opener&&window.opener.postMessage(
+        {type:'capture_done',downloadUrl:data.downloadUrl},'*'); }catch(_){}
+    } else {
+      sMain.textContent='❌ สร้าง PPTX ไม่สำเร็จ: '+(data.error||'');
+    }
+  }catch(e){
+    sMain.textContent='❌ เชื่อมต่อ server ไม่สำเร็จ: '+e.message;
+  }
+}
 </script>
 </body>
 </html>

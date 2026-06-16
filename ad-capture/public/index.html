@@ -139,8 +139,8 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
       <b>วิธีใช้งาน My Browser Capture (YouTube เท่านั้น):</b><br>
       1️⃣ <a href="/api/template" style="color:#1D9E75">⬇ ดาวน์โหลด Excel Template</a> → กรอก URL YouTube → กด <b>โหลดรายการ</b><br>
       2️⃣ ตั้งเวลารอต่อ URL (แนะนำ 15+ วินาที) → กด <b>เริ่ม Capture</b><br>
-      3️⃣ หน้าต่าง <b>"Ads Display"</b> จะเปิดขึ้น → เมื่อถูกถามให้แชร์ → เลือก <b>Chrome Tab → "Ads Display"</b> → กด Share<br>
-      4️⃣ <b>อย่าคลิกอะไร!</b> ระบบเปลี่ยน URL ให้เองอัตโนมัติ → ดาวน์โหลด PPTX
+      3️⃣ Tab <b>"Ads Display"</b> จะเปิดขึ้น → สลับไปที่ Tab นั้น → กด <b>⚡ เริ่ม Capture</b><br>
+      4️⃣ เลือก <b>Entire Screen</b> → Share → <b>ไม่ต้องทำอะไรเพิ่ม</b> ระบบ capture ให้เองอัตโนมัติ
     </div>
 
     <!-- Step A: เลือกไฟล์ -->
@@ -183,7 +183,7 @@ button.danger{width:100%;background:transparent;border:1px solid var(--red);
     </div>
     <div class="step" id="s2">
       <div class="step-icon">2️⃣</div>
-      <div class="step-text">เลือก Chrome Tab → <b>"Ads Display"</b> → กด Share<div class="step-sub" id="s2sub"></div></div>
+      <div class="step-text">เปิด Tab <b>"Ads Display"</b> อัตโนมัติ<div class="step-sub" id="s2sub"></div></div>
     </div>
     <div class="step" id="s3">
       <div class="step-icon">3️⃣</div>
@@ -338,198 +338,57 @@ function resetPreview() {
 async function startClientCapture() {
   if (!parsedAds.length) { alert('กรุณาโหลด Excel ก่อน'); return; }
 
-  clientCancelled = false;
-  const ads = parsedAds;
+  // บันทึก config ลง localStorage → display.html จะอ่านและทำ capture ทั้งหมดเอง
+  const config = {
+    ads: parsedAds.map((ad, i) => ({
+      ...ad,
+      waitSec: parseInt(document.getElementById(`wait-${i}`)?.value || '10')
+    }))
+  };
+  localStorage.setItem('adsCapConfig', JSON.stringify(config));
 
   // Reset UI
   document.getElementById('btnClient').disabled = true;
-  document.getElementById('cancelClient').style.display = 'block';
+  document.getElementById('cancelClient').style.display = 'none';
   document.getElementById('downloadLink').style.display = 'none';
   document.getElementById('progressBar').style.display = 'block';
-  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressFill').style.width = '20%';
   document.getElementById('steps').style.display = 'flex';
   ['s1','s2','s3','s4'].forEach((id, i) => stepReset(id, (i+1)+'️⃣', id === 's3' ? 'รอเริ่ม...' : ''));
 
-  const sw = screen.width, sh = screen.height;
-  const pw = Math.min(1280, sw - 100), ph = Math.min(720, sh - 100);
+  stepDone('s1', `${parsedAds.length} รายการ (พร้อม)`);
 
-  try {
-    stepDone('s1', `${ads.length} รายการ (พร้อม)`);
-
-    // ── STEP 2: เปิด display tab ก่อน แล้วให้ user เลือก tab นั้น ─────────────
-    // เปิด Ads Display เป็น tab ใหม่ (ไม่ใช่ popup) ก่อน getDisplayMedia
-    // เพื่อให้ user เห็น tab ชื่อ "Ads Display" ในหน้าต่าง share dialog
-    stepActive('s2', '⏳ เปิด Ads Display tab...');
-    displayWin = window.open('/display.html', '_blank');
-    if (!displayWin) {
-      stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup ที่ address bar แล้วลองใหม่');
-      return resetClientUI();
-    }
-    await sleep(1200); // รอให้ tab โหลด display.html
-
-    // ขอ share screen — Tab capture ทำงานต่อเนื่องแม้ URL เปลี่ยน
-    stepActive('s2', '🔴 เลือก Chrome Tab → "Ads Display" → กด Share');
-    try {
-      captureStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: 'browser', frameRate: 2, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
-    } catch (err) {
-      displayWin.close(); displayWin = null;
-      stepError('s2', 'ยกเลิกการแชร์ — กรุณาลองใหม่ แล้วเลือก Chrome Tab → "Ads Display"');
-      return resetClientUI();
-    }
-    // Focus display tab หลังจาก share dialog ปิด
-    try { displayWin.focus(); } catch(_) {}
-    await sleep(800);
-
-    // Setup video element to pull frames from stream
-    const video = document.createElement('video');
-    video.srcObject = captureStream;
-    video.muted = true;
-    await new Promise(r => { video.onloadedmetadata = r; });
-    await video.play();
-
-    // Stop stream when track ends (user clicked "Stop sharing")
-    captureStream.getVideoTracks()[0].addEventListener('ended', () => {
-      if (!clientCancelled) {
-        clientCancelled = true;
-        stepError('s3', 'หยุดแชร์หน้าจอก่อนกำหนด');
-      }
-    });
-
-    stepDone('s2', 'เชื่อมต่อหน้าจอสำเร็จ ✅');
-
-    // ── STEP 3: Capture each ad ───────────────────────────────────────────────
-    stepActive('s3', `0 / ${ads.length}`);
-    const results = [];
-    const CDWN = 3; // วินาที countdown ใน display.html ก่อนเปิด YouTube
-
-    // คำนวณเวลารวมที่ต้องรอ
-    function calcRemaining(fromIdx) {
-      let s = 0;
-      for (let j = fromIdx; j < ads.length; j++) {
-        s += CDWN + parseInt(document.getElementById(`wait-${j}`)?.value || '10') + 1;
-      }
-      return s;
-    }
-
-    for (let i = 0; i < ads.length; i++) {
-      if (clientCancelled) break;
-
-      const ad = ads[i];
-      const waitSec = parseInt(document.getElementById(`wait-${i}`)?.value || '10');
-      const remaining = calcRemaining(i);
-
-      // Highlight row
-      document.querySelectorAll('.ad-row').forEach(r => r.classList.remove('capturing'));
-      const rowEl = document.getElementById(`adrow-${i}`);
-      if (rowEl) rowEl.classList.add('capturing');
-
-      // Relay ผ่าน display.html เสมอ (ทำงานได้แม้ popup อยู่บน YouTube cross-origin)
-      const relayUrl = '/display.html'
-        + '?goto='      + encodeURIComponent(ad.url)
-        + '&idx='       + i
-        + '&total='     + ads.length
-        + '&name='      + encodeURIComponent(ad.name)
-        + '&sec='       + CDWN
-        + '&totalwait=' + remaining;
-
-      if (!displayWin || displayWin.closed) {
-        displayWin = window.open(relayUrl, 'AdsDisplay',
-          `width=${sw},height=${sh},left=0,top=0,toolbar=no,menubar=no,scrollbars=no`);
-        if (displayWin) {
-          try { displayWin.moveTo(0, 0); displayWin.resizeTo(sw, sh); } catch(_) {}
-        }
-      } else {
-        displayWin.location.href = relayUrl; // กลับมา same-origin → ทำงานได้เสมอ
-      }
-      if (displayWin) { try { displayWin.focus(); } catch(_) {} }
-
-      // รอ display.html นับ countdown (CDWN วินาที) แล้ว navigate ไป YouTube
-      for (let t = CDWN; t > 0; t--) {
-        if (clientCancelled) break;
-        document.getElementById('s3sub').textContent =
-          `(${i+1}/${ads.length}) ${ad.name} — ⏳ countdown ${t}s`;
-        await sleep(1000);
-      }
-      await sleep(600); // buffer รอ YouTube เริ่มโหลด
-
-      // รอ YouTube โหลดและโฆษณาเล่น
-      for (let t = waitSec; t > 0; t--) {
-        if (clientCancelled) break;
-        const remNow = calcRemaining(i) - (waitSec - t);
-        document.getElementById('s3sub').textContent =
-          `(${i+1}/${ads.length}) ${ad.name} — รอโฆษณา ${t}s  |  เหลือรวม ~${remNow}s`;
-        await sleep(1000);
-      }
-
-      if (clientCancelled) { results.push({ ...ad, screenshotB64: null, error: 'ถูกยกเลิก' }); break; }
-
-      // Focus popup ก่อนถ่ายภาพ
-      if (displayWin) { try { displayWin.focus(); } catch(_) {} }
-      await sleep(400);
-
-      // Capture frame
-      document.getElementById('s3sub').textContent = `(${i+1}/${ads.length}) ${ad.name} — 📸 ถ่ายภาพ...`;
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      const screenshotB64 = canvas.toDataURL('image/jpeg', 0.85);
-
-      results.push({ ...ad, screenshotB64, status: 'ok' });
-      if (rowEl) { rowEl.classList.remove('capturing'); rowEl.classList.add('captured'); }
-
-      document.getElementById('progressFill').style.width =
-        Math.round(((i + 1) / ads.length) * 90) + '%';
-    }
-
-    // Stop stream
-    captureStream.getTracks().forEach(t => t.stop());
-    captureStream = null;
-    if (displayWin) { displayWin.close(); displayWin = null; }
-
-    if (clientCancelled && results.every(r => !r.screenshotB64)) {
-      stepError('s3', 'ยกเลิกทั้งหมด ไม่มีภาพส่ง');
-      return resetClientUI();
-    }
-
-    const captured = results.filter(r => r.screenshotB64).length;
-    stepDone('s3', `ได้ภาพทั้งหมด ${captured}/${ads.length} รายการ`);
-
-    // ── STEP 4: Build PPTX ────────────────────────────────────────────────────
-    stepActive('s4', 'กำลังสร้าง PowerPoint...');
-    document.getElementById('progressFill').style.width = '95%';
-
-    const buildRes = await fetch('/api/build-from-screenshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ads: results }),
-    });
-    const buildData = await buildRes.json();
-    if (buildData.error) { stepError('s4', buildData.error); return resetClientUI(); }
-
-    document.getElementById('progressFill').style.width = '100%';
-    stepDone('s4', 'PowerPoint พร้อมดาวน์โหลด 🎉');
-
-    document.getElementById('downloadLink').href = buildData.downloadUrl;
-    document.getElementById('downloadLink').style.display = 'block';
-
-  } catch (err) {
-    if (captureStream) { captureStream.getTracks().forEach(t => t.stop()); captureStream = null; }
-    if (displayWin) { displayWin.close(); displayWin = null; }
-    stepError('s3', 'เกิดข้อผิดพลาด: ' + err.message);
-  } finally {
-    resetClientUI(false);
+  // เปิด display.html เป็น tab ใหม่ — display.html จะทำ capture ทั้งหมดเอง
+  displayWin = window.open('/display.html', '_blank');
+  if (!displayWin) {
+    stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup ที่ address bar แล้วลองใหม่');
+    resetClientUI();
+    return;
   }
+
+  stepDone('s2', 'เปิด Ads Display tab แล้ว ✅ — กรุณาดำเนินการในหน้าต่างนั้น');
+  stepActive('s3', 'รอ capture จาก Ads Display tab...');
+  document.getElementById('progressFill').style.width = '40%';
+
+  // รอผลลัพธ์จาก display.html ผ่าน postMessage
+  window.addEventListener('message', function handler(e) {
+    if (e.data?.type === 'capture_done') {
+      window.removeEventListener('message', handler);
+      document.getElementById('progressFill').style.width = '100%';
+      stepDone('s3', 'ถ่ายภาพเสร็จสมบูรณ์ ✅');
+      stepDone('s4', 'PowerPoint พร้อมดาวน์โหลด 🎉');
+      const link = document.getElementById('downloadLink');
+      link.href = e.data.downloadUrl;
+      link.style.display = 'block';
+      document.getElementById('btnClient').disabled = false;
+    }
+  });
 }
 
 function cancelClient() {
-  clientCancelled = true;
-  if (captureStream) { captureStream.getTracks().forEach(t => t.stop()); captureStream = null; }
   if (displayWin) { displayWin.close(); displayWin = null; }
-  document.getElementById('s3sub').textContent = 'กำลังหยุด...';
+  localStorage.removeItem('adsCapConfig');
+  resetClientUI();
 }
 
 function resetClientUI(hideSteps = false) {
