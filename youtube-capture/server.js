@@ -24,13 +24,12 @@ async function getBrowser() {
       '--single-process',
       '--disable-blink-features=AutomationControlled',
       '--autoplay-policy=no-user-gesture-required',
+      '--disable-web-security',
+      '--lang=th-TH',
     ],
   });
   browserReady = true;
-  browser.on('disconnected', () => {
-    browser = null;
-    browserReady = false;
-  });
+  browser.on('disconnected', () => { browser = null; browserReady = false; });
   return browser;
 }
 
@@ -56,41 +55,53 @@ app.post('/capture', async (req, res) => {
     if (!videoId) throw new Error('ไม่พบ Video ID จาก URL นี้');
 
     const b = await safeGetBrowser();
-
-    // Use persistent context to allow autoplay
     page = await b.newPage();
 
-    // Spoof real browser headers
+    // Spoof real Chrome browser
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Upgrade-Insecure-Requests': '1',
     });
+
     await page.setViewportSize({ width: 1280, height: 720 });
 
-    // Hide automation fingerprints
+    // Deep spoof — remove all automation fingerprints
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      window.chrome = { runtime: {} };
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+      Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US', 'en'] });
+      window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {}, app: {} };
+      const origQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (params) =>
+        params.name === 'notifications'
+          ? Promise.resolve({ state: Notification.permission })
+          : origQuery(params);
     });
 
-    // Use watch page directly — avoids embed restrictions (Error 153)
-    const watchUrl = `https://www.youtube.com/watch?v=${videoId}&t=5`;
+    // Use clean URL — no extra params
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
     await page.goto(watchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // Dismiss cookie/consent popup if present
+    // Dismiss consent/cookie popup
     try {
-      await page.click('button[aria-label="Reject all"], button[aria-label="Accept all"], .eom-button-row button:first-child', { timeout: 3000 });
-      await page.waitForTimeout(500);
+      const consentBtn = await page.waitForSelector(
+        'button[aria-label="Reject all"], tp-yt-paper-button#button[aria-label="Reject all"], .eom-button-row button:first-child',
+        { timeout: 3000 }
+      );
+      if (consentBtn) { await consentBtn.click(); await page.waitForTimeout(800); }
     } catch { /* no popup */ }
 
-    // Click play button
+    // Click play if needed
     try {
-      await page.click('button.ytp-large-play-button', { timeout: 5000 });
-    } catch { /* video may have autoplayed */ }
+      await page.click('button.ytp-large-play-button', { timeout: 4000 });
+    } catch { /* autoplay or already playing */ }
 
-    // Wait for video to be playing
+    // Wait for video element to be ready
     await page.waitForFunction(() => {
-      const video = document.querySelector('video');
-      return video && video.readyState >= 2;
+      const v = document.querySelector('video');
+      return v && v.readyState >= 2;
     }, { timeout: 15000 }).catch(() => {});
 
     // Seek to second 5
@@ -99,17 +110,9 @@ app.post('/capture', async (req, res) => {
       if (v) { v.currentTime = 5; v.play().catch(() => {}); }
     });
 
-    // Seek to exactly second 5
-    await page.evaluate(() => {
-      const v = document.querySelector('video');
-      if (v) v.currentTime = 5;
-    });
-
-    // Brief wait for frame to render after seek
     await page.waitForTimeout(1500);
 
     const screenshot = await page.screenshot({ type: 'png' });
-
     res.set('Content-Type', 'image/png');
     res.set('Content-Disposition', 'inline; filename="youtube-capture.png"');
     res.send(screenshot);
