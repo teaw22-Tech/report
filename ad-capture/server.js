@@ -107,6 +107,54 @@ app.get('/api/download/:jobId', (req, res) => {
   res.download(job.file, 'Ads_Capture.pptx');
 });
 
+// ── Client-side capture endpoints ──────────────────────────────────────────
+
+// รับ Excel → คืนรายการ {name, type, url} ให้ browser ทำ capture เอง
+app.post('/api/parse-excel', upload.single('excel'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'ไม่พบไฟล์' });
+  try {
+    const ads = readAdsFromExcel(req.file.path);
+    res.json({ ads });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  } finally {
+    fs.unlink(req.file.path, () => {});
+  }
+});
+
+// รับ screenshot base64 จาก browser → สร้าง PPTX → คืน download URL
+app.post('/api/build-from-screenshots', express.json({ limit: '200mb' }), async (req, res) => {
+  const { ads } = req.body;
+  if (!Array.isArray(ads) || ads.length === 0) {
+    return res.status(400).json({ error: 'ไม่พบข้อมูล ads' });
+  }
+
+  const jobId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const jobDir = path.join(WORK_DIR, jobId);
+  const shotsDir = path.join(jobDir, 'screenshots');
+  fs.mkdirSync(shotsDir, { recursive: true });
+
+  try {
+    const results = ads.map((ad, i) => {
+      if (ad.screenshotB64) {
+        const filePath = path.join(shotsDir,
+          `${String(i + 1).padStart(3, '0')}_${ad.type}.jpg`.replace(/[^a-zA-Z0-9._-]/g, '_'));
+        const data = ad.screenshotB64.replace(/^data:image\/\w+;base64,/, '');
+        fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
+        return { ...ad, screenshot: filePath, status: 'ok' };
+      }
+      return { ...ad, screenshot: null, status: 'error', error: ad.error || 'ไม่ได้รับภาพ' };
+    });
+
+    const outFile = path.join(jobDir, 'Ads_Capture.pptx');
+    await buildPptx(results, outFile);
+    jobs.set(jobId, { done: true, file: outFile, clients: new Set(), log: [] });
+    res.json({ downloadUrl: `/api/download/${jobId}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Ads Capture UI: http://localhost:${PORT}`);
 });

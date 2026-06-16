@@ -5,162 +5,462 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ads Capture DV360 → PowerPoint</title>
 <style>
-  :root{--bg:#0d1117;--card:#161b22;--border:rgba(255,255,255,.1);--text:#e6edf3;--muted:#7d8590;--accent:#1D9E75;--red:#f85149}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:2rem;max-width:520px;width:100%}
-  h1{font-size:18px;margin-bottom:6px}
-  p.desc{color:var(--muted);font-size:13px;margin-bottom:1.5rem;line-height:1.6}
-  .field{margin-bottom:1rem}
-  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-  input[type=file]{width:100%;font-size:13px;color:var(--text)}
-  input[type=number]{width:100px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px}
-  button{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:.5rem}
-  button:disabled{opacity:.5;cursor:not-allowed}
-  .btn-cancel{background:transparent;border:1px solid var(--red);color:var(--red);display:none}
-  .log{margin-top:1.25rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:12px;max-height:240px;overflow-y:auto;display:none;white-space:pre-wrap;line-height:1.6}
-  .status-line{display:none;margin-top:8px;font-size:12px;color:var(--accent);font-family:monospace}
-  .status-line.show{display:flex;align-items:center;gap:6px}
-  .spinner{width:10px;height:10px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px;display:none}
-  .progress-fill{height:100%;background:var(--accent);width:0%;transition:width .2s}
-  .download{display:none;margin-top:1rem;text-align:center;padding:10px;background:rgba(29,158,117,.12);border:1px solid var(--accent);border-radius:8px;color:var(--accent);text-decoration:none;font-weight:600;font-size:13px}
-  .err{color:var(--red)}
+:root{
+  --bg:#0d1117;--card:#161b22;--border:rgba(255,255,255,.1);
+  --text:#e6edf3;--muted:#7d8590;--accent:#1D9E75;--red:#f85149;--yellow:#e3b341;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:2rem;max-width:560px;width:100%}
+h1{font-size:18px;margin-bottom:6px}
+p.desc{color:var(--muted);font-size:13px;margin-bottom:1.5rem;line-height:1.6}
+
+/* Mode tabs */
+.mode-tabs{display:flex;gap:8px;margin-bottom:1.5rem}
+.mode-tab{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
+.mode-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(29,158,117,.08)}
+
+.panel{display:none}
+.panel.active{display:block}
+
+.field{margin-bottom:1rem}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+input[type=file]{width:100%;font-size:13px;color:var(--text)}
+
+button.primary{width:100%;background:var(--accent);color:#fff;border:none;
+  border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:.5rem}
+button.primary:disabled{opacity:.5;cursor:not-allowed}
+button.danger{width:100%;background:transparent;border:1px solid var(--red);
+  color:var(--red);border-radius:8px;padding:9px;font-size:13px;cursor:pointer;
+  margin-top:8px;display:none}
+
+/* Status steps */
+.steps{margin-top:1.25rem;display:none;flex-direction:column;gap:6px}
+.step{display:flex;align-items:flex-start;gap:10px;font-size:13px;padding:8px 10px;
+  border-radius:8px;background:var(--bg);border:1px solid var(--border)}
+.step-icon{font-size:14px;flex-shrink:0;width:18px;text-align:center}
+.step-text{flex:1;line-height:1.5}
+.step-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.step.active{border-color:var(--accent)}
+.step.done{border-color:rgba(29,158,117,.3);opacity:.8}
+.step.error{border-color:var(--red)}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--accent);
+  border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.progress-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px;display:none}
+.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .3s}
+
+/* Log */
+.log{margin-top:1rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;font-family:monospace;font-size:11.5px;max-height:200px;overflow-y:auto;
+  display:none;white-space:pre-wrap;line-height:1.7}
+.log .err{color:var(--red)}
+.log .ok{color:var(--accent)}
+.log .warn{color:var(--yellow)}
+.log .info{color:var(--muted)}
+
+/* Screen share instruction box */
+.share-hint{background:rgba(29,158,117,.06);border:1px solid rgba(29,158,117,.25);
+  border-radius:8px;padding:12px 14px;font-size:12.5px;line-height:1.7;
+  margin-bottom:1rem;display:none}
+.share-hint b{color:var(--accent)}
+
+.download{display:none;margin-top:1rem;text-align:center;padding:12px;
+  background:rgba(29,158,117,.12);border:1px solid var(--accent);border-radius:8px;
+  color:var(--accent);text-decoration:none;font-weight:600;font-size:14px}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>📸 Ads Capture DV360 → PowerPoint</h1>
-  <p class="desc">อัปโหลดไฟล์ Excel ที่มีรายชื่อ Ads และลิงก์ (คอลัมน์ NAME, TYPE, URL) ระบบจะวิ่งเข้าไปแคปภาพแต่ละลิงก์ แล้วรวมเป็นไฟล์ PowerPoint ให้อัตโนมัติ</p>
+  <p class="desc">อัปโหลด Excel ที่มี NAME, TYPE, URL แล้วระบบจะแคปภาพโฆษณาและสร้าง PowerPoint อัตโนมัติ</p>
 
-  <form id="form">
+  <!-- Mode selector -->
+  <div class="mode-tabs">
+    <button class="mode-tab" id="tabServer" onclick="switchMode('server')">
+      🖥️ Server Capture<br><small style="color:var(--muted);font-size:11px">ใช้ server แคปให้</small>
+    </button>
+    <button class="mode-tab active" id="tabClient" onclick="switchMode('client')">
+      🖥️→📷 My Browser Capture<br><small style="font-size:11px">ใช้หน้าจอของฉัน (แนะนำ)</small>
+    </button>
+  </div>
+
+  <!-- ── Server mode panel ── -->
+  <div class="panel" id="panelServer">
+    <form id="formServer">
+      <div class="field">
+        <label>ไฟล์ Excel (.xlsx)</label>
+        <input type="file" id="excelServer" accept=".xlsx,.xls" required>
+      </div>
+      <button type="submit" class="primary" id="btnServer">เริ่มแคปภาพ (Server)</button>
+    </form>
+    <button class="danger" id="cancelServer">⏹ ยกเลิก</button>
+  </div>
+
+  <!-- ── Client / Screen Share mode panel ── -->
+  <div class="panel active" id="panelClient">
+    <div class="share-hint" id="shareHint">
+      <b>วิธีใช้งาน My Browser Capture:</b><br>
+      1️⃣ เลือกไฟล์ Excel แล้วกด <b>เริ่ม</b><br>
+      2️⃣ เบราว์เซอร์จะเปิดหน้าต่างแสดงผลขึ้นมา → <b>อย่าปิด</b><br>
+      3️⃣ เมื่อถูกถามให้แชร์หน้าจอ ให้เลือก <b>"หน้าต่าง Ads Display"</b> แล้วกด Share<br>
+      4️⃣ รอระบบเปิดลิงก์โฆษณาทีละอัน แล้ว PPTX จะดาวน์โหลดอัตโนมัติ
+    </div>
     <div class="field">
       <label>ไฟล์ Excel (.xlsx)</label>
-      <input type="file" name="excel" id="excel" accept=".xlsx,.xls" required>
+      <input type="file" id="excelClient" accept=".xlsx,.xls" required>
     </div>
-    <button type="submit" id="submitBtn">เริ่มแคปภาพและสร้าง PowerPoint</button>
-  </form>
-  <button type="button" id="cancelBtn" class="btn-cancel">⏹ ยกเลิกการทำงาน</button>
+    <div class="field">
+      <label>รอให้หน้าโฆษณาโหลด (วินาที) — YouTube แนะนำ 10+</label>
+      <input type="range" id="waitSec" min="5" max="20" value="10" style="width:180px;vertical-align:middle">
+      <span id="waitVal" style="margin-left:8px;font-size:13px;color:var(--accent)">10 วินาที</span>
+    </div>
+    <button class="primary" id="btnClient" onclick="startClientCapture()">🚀 เริ่ม Capture ด้วยหน้าจอของฉัน</button>
+    <button class="danger" id="cancelClient" onclick="cancelClient()">⏹ หยุด</button>
+  </div>
 
+  <!-- Progress bar -->
   <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
-  <div class="status-line" id="statusLine"></div>
+
+  <!-- Status steps (client mode) -->
+  <div class="steps" id="steps">
+    <div class="step" id="s1">
+      <div class="step-icon">1️⃣</div>
+      <div class="step-text">อ่านไฟล์ Excel<div class="step-sub" id="s1sub"></div></div>
+    </div>
+    <div class="step" id="s2">
+      <div class="step-icon">2️⃣</div>
+      <div class="step-text">เปิดหน้าต่างแสดงผล + ขอแชร์หน้าจอ<div class="step-sub" id="s2sub"></div></div>
+    </div>
+    <div class="step" id="s3">
+      <div class="step-icon">3️⃣</div>
+      <div class="step-text">แคปภาพโฆษณา<div class="step-sub" id="s3sub">รอเริ่ม...</div></div>
+    </div>
+    <div class="step" id="s4">
+      <div class="step-icon">4️⃣</div>
+      <div class="step-text">สร้าง PowerPoint<div class="step-sub" id="s4sub"></div></div>
+    </div>
+  </div>
+
+  <!-- Server mode log -->
   <div class="log" id="log"></div>
-  <a class="download" id="download" href="#">⬇️ ดาวน์โหลดไฟล์ PowerPoint</a>
+
+  <a class="download" id="downloadLink" href="#">⬇️ ดาวน์โหลด PowerPoint</a>
 </div>
 
 <script>
-const form = document.getElementById('form');
-const submitBtn = document.getElementById('submitBtn');
-const cancelBtn = document.getElementById('cancelBtn');
-const logEl = document.getElementById('log');
-const progressBar = document.getElementById('progressBar');
-const progressFill = document.getElementById('progressFill');
-const downloadEl = document.getElementById('download');
-const statusLine = document.getElementById('statusLine');
-let currentJobId = null;
+// ─── Mode switch ──────────────────────────────────────────────────────────────
+let currentMode = 'client';
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('tabServer').classList.toggle('active', mode === 'server');
+  document.getElementById('tabClient').classList.toggle('active', mode === 'client');
+  document.getElementById('panelServer').classList.toggle('active', mode === 'server');
+  document.getElementById('panelClient').classList.toggle('active', mode === 'client');
+  document.getElementById('shareHint').style.display = mode === 'client' ? 'block' : 'none';
+  document.getElementById('log').style.display = 'none';
+  document.getElementById('steps').style.display = 'none';
+  document.getElementById('downloadLink').style.display = 'none';
+}
+switchMode('client'); // default
 
-function setStatus(text){
-  if (!text) {
-    statusLine.classList.remove('show');
-    statusLine.innerHTML = '';
-    return;
-  }
-  statusLine.classList.add('show');
-  statusLine.innerHTML = '<div class="spinner"></div><span></span>';
-  statusLine.querySelector('span').textContent = text;
+// ─── Wait slider ──────────────────────────────────────────────────────────────
+const waitSlider = document.getElementById('waitSec');
+waitSlider.addEventListener('input', () => {
+  document.getElementById('waitVal').textContent = waitSlider.value + ' วินาที';
+});
+
+// ─── Step helpers (client mode) ───────────────────────────────────────────────
+function stepActive(id, sub) {
+  const el = document.getElementById(id);
+  el.className = 'step active';
+  el.querySelector('.step-icon').innerHTML = '<div class="spinner"></div>';
+  if (sub !== undefined) document.getElementById(id + 'sub').textContent = sub;
+}
+function stepDone(id, sub) {
+  const el = document.getElementById(id);
+  el.className = 'step done';
+  el.querySelector('.step-icon').textContent = '✅';
+  if (sub !== undefined) document.getElementById(id + 'sub').textContent = sub;
+}
+function stepError(id, sub) {
+  const el = document.getElementById(id);
+  el.className = 'step error';
+  el.querySelector('.step-icon').textContent = '❌';
+  if (sub !== undefined) document.getElementById(id + 'sub').textContent = sub;
+}
+function stepReset(id, icon, sub) {
+  const el = document.getElementById(id);
+  el.className = 'step';
+  el.querySelector('.step-icon').textContent = icon;
+  if (sub !== undefined) document.getElementById(id + 'sub').textContent = sub;
 }
 
-function appendLog(text, isErr){
+// ─── Log helpers (server mode) ────────────────────────────────────────────────
+const logEl = document.getElementById('log');
+function appendLog(text, cls) {
   logEl.style.display = 'block';
-  const line = document.createElement('div');
-  if(isErr) line.className = 'err';
-  line.textContent = text;
-  logEl.appendChild(line);
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = text;
+  logEl.appendChild(d);
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-function stopUI(){
-  submitBtn.disabled = false;
-  cancelBtn.style.display = 'none';
-  cancelBtn.disabled = false;
-  cancelBtn.textContent = '⏹ ยกเลิกการทำงาน';
-  currentJobId = null;
-  setStatus(null);
+// ─── Client Capture ───────────────────────────────────────────────────────────
+let clientCancelled = false;
+let displayWin = null;
+let captureStream = null;
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function startClientCapture() {
+  const fileInput = document.getElementById('excelClient');
+  if (!fileInput.files[0]) { alert('กรุณาเลือกไฟล์ Excel ก่อน'); return; }
+
+  clientCancelled = false;
+  const waitMs = parseInt(waitSlider.value) * 1000;
+
+  // Reset UI
+  document.getElementById('btnClient').disabled = true;
+  document.getElementById('cancelClient').style.display = 'block';
+  document.getElementById('downloadLink').style.display = 'none';
+  document.getElementById('progressBar').style.display = 'block';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('steps').style.display = 'flex';
+  ['s1','s2','s3','s4'].forEach((id, i) => stepReset(id, (i+1)+'️⃣', id === 's3' ? 'รอเริ่ม...' : ''));
+
+  try {
+    // ── STEP 1: Parse Excel ──────────────────────────────────────────────────
+    stepActive('s1', 'กำลังอ่านไฟล์...');
+    const formData = new FormData();
+    formData.append('excel', fileInput.files[0]);
+    const parseRes = await fetch('/api/parse-excel', { method: 'POST', body: formData });
+    const parseData = await parseRes.json();
+    if (parseData.error) { stepError('s1', parseData.error); return resetClientUI(); }
+    const ads = parseData.ads;
+    stepDone('s1', `พบ ${ads.length} รายการ`);
+
+    // ── STEP 2: Open display window + request screen share ───────────────────
+    stepActive('s2', 'กำลังเปิดหน้าต่างแสดงผล...');
+
+    // Open display window — must happen synchronously from user gesture context
+    displayWin = window.open('', 'AdsDisplay',
+      'width=1280,height=720,left=60,top=60,toolbar=no,menubar=no,scrollbars=no');
+    if (!displayWin) {
+      stepError('s2', 'เบราว์เซอร์บล็อก popup — กรุณาอนุญาต popup แล้วลองใหม่');
+      return resetClientUI();
+    }
+    displayWin.document.write(`<!DOCTYPE html><html><head><title>Ads Display</title>
+      <style>body{margin:0;background:#111;color:#fff;font-family:sans-serif;
+      display:flex;align-items:center;justify-content:center;height:100vh;font-size:22px}</style>
+      </head><body><div>📺 Ads Display Window<br>
+      <span style="font-size:14px;color:#aaa">กรุณาเลือกหน้าต่างนี้เมื่อถูกถามให้แชร์หน้าจอ</span>
+      </div></body></html>`);
+    displayWin.document.close();
+
+    await sleep(800);
+
+    stepActive('s2', 'กรุณาเลือก "Ads Display" ในหน้าต่างที่ถามให้แชร์หน้าจอ...');
+    try {
+      captureStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 2, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+    } catch (err) {
+      stepError('s2', 'ยกเลิกการแชร์หน้าจอ — กรุณาลองใหม่แล้วกด Share');
+      if (displayWin) { displayWin.close(); displayWin = null; }
+      return resetClientUI();
+    }
+
+    // Setup video element to pull frames from stream
+    const video = document.createElement('video');
+    video.srcObject = captureStream;
+    video.muted = true;
+    await new Promise(r => { video.onloadedmetadata = r; });
+    await video.play();
+
+    // Stop stream when track ends (user clicked "Stop sharing")
+    captureStream.getVideoTracks()[0].addEventListener('ended', () => {
+      if (!clientCancelled) {
+        clientCancelled = true;
+        stepError('s3', 'หยุดแชร์หน้าจอก่อนกำหนด');
+      }
+    });
+
+    stepDone('s2', 'เชื่อมต่อหน้าจอสำเร็จ ✅');
+
+    // ── STEP 3: Capture each ad ───────────────────────────────────────────────
+    stepActive('s3', `0 / ${ads.length}`);
+    const results = [];
+
+    for (let i = 0; i < ads.length; i++) {
+      if (clientCancelled) break;
+
+      const ad = ads[i];
+      document.getElementById('s3sub').textContent =
+        `(${i + 1}/${ads.length}) เปิด: ${ad.name}`;
+
+      // Navigate display window to the ad URL (reuses same window by name)
+      window.open(ad.url, 'AdsDisplay');
+
+      // Phase 1: wait for page load
+      const loadWait = Math.min(waitMs * 0.4, 4000);
+      for (let t = 0; t < loadWait; t += 500) {
+        if (clientCancelled) break;
+        document.getElementById('s3sub').textContent =
+          `(${i+1}/${ads.length}) ${ad.name} — โหลดหน้า... ${Math.round((loadWait-t)/1000)}s`;
+        await sleep(500);
+      }
+
+      // Phase 2: wait for video to play
+      const videoWait = waitMs - loadWait;
+      for (let t = 0; t < videoWait; t += 500) {
+        if (clientCancelled) break;
+        document.getElementById('s3sub').textContent =
+          `(${i+1}/${ads.length}) ${ad.name} — รอโฆษณาเล่น... ${Math.round((videoWait-t)/1000)}s`;
+        await sleep(500);
+      }
+
+      if (clientCancelled) { results.push({ ...ad, screenshotB64: null, error: 'ถูกยกเลิก' }); break; }
+
+      // Capture frame
+      document.getElementById('s3sub').textContent = `(${i+1}/${ads.length}) ${ad.name} — 📸 ถ่ายภาพ...`;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const screenshotB64 = canvas.toDataURL('image/jpeg', 0.85);
+
+      results.push({ ...ad, screenshotB64, status: 'ok' });
+
+      const pct = Math.round(((i + 1) / ads.length) * 90);
+      document.getElementById('progressFill').style.width = pct + '%';
+    }
+
+    // Stop stream
+    captureStream.getTracks().forEach(t => t.stop());
+    captureStream = null;
+    if (displayWin) { displayWin.close(); displayWin = null; }
+
+    if (clientCancelled && results.every(r => !r.screenshotB64)) {
+      stepError('s3', 'ยกเลิกทั้งหมด ไม่มีภาพส่ง');
+      return resetClientUI();
+    }
+
+    const captured = results.filter(r => r.screenshotB64).length;
+    stepDone('s3', `ได้ภาพทั้งหมด ${captured}/${ads.length} รายการ`);
+
+    // ── STEP 4: Build PPTX ────────────────────────────────────────────────────
+    stepActive('s4', 'กำลังสร้าง PowerPoint...');
+    document.getElementById('progressFill').style.width = '95%';
+
+    const buildRes = await fetch('/api/build-from-screenshots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ads: results }),
+    });
+    const buildData = await buildRes.json();
+    if (buildData.error) { stepError('s4', buildData.error); return resetClientUI(); }
+
+    document.getElementById('progressFill').style.width = '100%';
+    stepDone('s4', 'PowerPoint พร้อมดาวน์โหลด 🎉');
+
+    document.getElementById('downloadLink').href = buildData.downloadUrl;
+    document.getElementById('downloadLink').style.display = 'block';
+
+  } catch (err) {
+    if (captureStream) { captureStream.getTracks().forEach(t => t.stop()); captureStream = null; }
+    if (displayWin) { displayWin.close(); displayWin = null; }
+    stepError('s3', 'เกิดข้อผิดพลาด: ' + err.message);
+  } finally {
+    resetClientUI(false);
+  }
 }
 
-form.addEventListener('submit', async (e) => {
+function cancelClient() {
+  clientCancelled = true;
+  if (captureStream) { captureStream.getTracks().forEach(t => t.stop()); captureStream = null; }
+  if (displayWin) { displayWin.close(); displayWin = null; }
+  document.getElementById('s3sub').textContent = 'กำลังหยุด...';
+}
+
+function resetClientUI(resetSteps = true) {
+  document.getElementById('btnClient').disabled = false;
+  document.getElementById('cancelClient').style.display = 'none';
+  if (resetSteps) {
+    document.getElementById('progressBar').style.display = 'none';
+    document.getElementById('steps').style.display = 'none';
+  }
+}
+
+// ─── Server Capture (existing flow) ──────────────────────────────────────────
+let currentJobId = null;
+
+document.getElementById('formServer').addEventListener('submit', async (e) => {
   e.preventDefault();
-  submitBtn.disabled = true;
-  cancelBtn.style.display = 'block';
+  const btn = document.getElementById('btnServer');
+  btn.disabled = true;
+  document.getElementById('cancelServer').style.display = 'block';
   logEl.innerHTML = '';
-  downloadEl.style.display = 'none';
-  progressBar.style.display = 'block';
-  progressFill.style.width = '0%';
+  logEl.style.display = 'none';
+  document.getElementById('downloadLink').style.display = 'none';
+  document.getElementById('progressBar').style.display = 'block';
+  document.getElementById('progressFill').style.width = '0%';
 
   const formData = new FormData();
-  formData.append('excel', document.getElementById('excel').files[0]);
+  formData.append('excel', document.getElementById('excelServer').files[0]);
 
   try {
     const res = await fetch('/api/generate', { method: 'POST', body: formData });
     const data = await res.json();
-    if (data.error) { appendLog('ผิดพลาด: ' + data.error, true); stopUI(); return; }
+    if (data.error) { appendLog('ผิดพลาด: ' + data.error, 'err'); btn.disabled = false; return; }
 
     currentJobId = data.jobId;
     const evtSource = new EventSource('/api/progress/' + data.jobId);
     evtSource.onmessage = (msg) => {
       const ev = JSON.parse(msg.data);
       if (ev.type === 'start') {
-        appendLog(`พบทั้งหมด ${ev.total} รายการ กำลังเริ่มแคปภาพ...`);
+        appendLog(`พบ ${ev.total} รายการ กำลังเริ่ม...`, 'info');
       } else if (ev.type === 'progress') {
         if (ev.status === 'running') {
-          appendLog(`(${ev.index+1}/${ev.total}) กำลังแคป: ${ev.name}`);
-          setStatus('กำลังเริ่มต้น...');
+          appendLog(`▶ (${ev.index+1}/${ev.total}) ${ev.name}`);
         } else if (ev.status === 'tick') {
-          setStatus(`(${ev.index+1}/${ev.total}) ${ev.name}: ${ev.step}`);
+          // update last line
         } else {
-          appendLog(`  -> ${ev.status === 'ok' ? 'สำเร็จ' : 'ผิดพลาด: ' + ev.error}`, ev.status !== 'ok');
-          if (ev.warning) appendLog(`  ⚠ ${ev.warning}`, true);
-          progressFill.style.width = Math.round(((ev.index+1)/ev.total)*100) + '%';
-          setStatus(null);
+          const ok = ev.status === 'ok';
+          appendLog(`  ${ok ? '✅' : '❌'} ${ok ? 'สำเร็จ' : ev.error}`, ok ? 'ok' : 'err');
+          if (ev.warning) appendLog(`  ⚠ ${ev.warning}`, 'warn');
+          document.getElementById('progressFill').style.width = Math.round(((ev.index+1)/ev.total)*100) + '%';
         }
-      } else if (ev.type === 'done') {
-        appendLog('เสร็จสิ้น! กดปุ่มด้านล่างเพื่อดาวน์โหลด');
-        downloadEl.href = ev.downloadUrl;
-        downloadEl.style.display = 'block';
-        stopUI();
-        evtSource.close();
-      } else if (ev.type === 'cancelled') {
-        appendLog('ยกเลิกแล้ว — ดาวน์โหลดผลลัพธ์ที่ทำไปแล้วได้');
-        downloadEl.href = ev.downloadUrl;
-        downloadEl.style.display = 'block';
-        stopUI();
+      } else if (ev.type === 'done' || ev.type === 'cancelled') {
+        appendLog(ev.type === 'done' ? 'เสร็จสิ้น! 🎉' : 'ยกเลิกแล้ว', 'ok');
+        document.getElementById('downloadLink').href = ev.downloadUrl;
+        document.getElementById('downloadLink').style.display = 'block';
+        btn.disabled = false;
+        document.getElementById('cancelServer').style.display = 'none';
         evtSource.close();
       } else if (ev.type === 'error') {
-        appendLog('เกิดข้อผิดพลาด: ' + ev.error, true);
-        stopUI();
+        appendLog('ผิดพลาด: ' + ev.error, 'err');
+        btn.disabled = false;
+        document.getElementById('cancelServer').style.display = 'none';
         evtSource.close();
       }
     };
-    evtSource.onerror = () => { evtSource.close(); };
+    evtSource.onerror = () => evtSource.close();
   } catch (err) {
-    appendLog('ผิดพลาด: ' + err.message, true);
-    stopUI();
+    appendLog('ผิดพลาด: ' + err.message, 'err');
+    btn.disabled = false;
   }
 });
 
-cancelBtn.addEventListener('click', async () => {
+document.getElementById('cancelServer').addEventListener('click', async () => {
   if (!currentJobId) return;
-  cancelBtn.disabled = true;
-  cancelBtn.textContent = 'กำลังยกเลิก...';
-  appendLog('กำลังขอยกเลิก...');
-  try {
-    await fetch('/api/cancel/' + currentJobId, { method: 'POST' });
-  } catch (err) {
-    appendLog('ยกเลิกไม่สำเร็จ: ' + err.message, true);
-    cancelBtn.disabled = false;
-    cancelBtn.textContent = '⏹ ยกเลิกการทำงาน';
-  }
+  await fetch('/api/cancel/' + currentJobId, { method: 'POST' });
 });
 </script>
 </body>
