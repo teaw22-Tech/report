@@ -5,6 +5,15 @@ const xlsx = require('xlsx');
 const pptxgen = require('pptxgenjs');
 const { chromium } = require('playwright');
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const LAUNCH_TIMEOUT_MS = 30_000;
+const PER_AD_TIMEOUT_MS = 60_000;
+const MAX_WAIT_FOR_VIDEO_MS = 15_000;
+const FALLBACK_WAIT_MS = 6_000;
+const POLL_INTERVAL_MS = 1_000;
+const EXTRA_WAIT_AFTER_PLAY_MS = 2_000;
+
 const PLAY_BUTTON_SELECTORS = [
   '.ytp-large-play-button',
   '.vjs-big-play-button',
@@ -15,7 +24,6 @@ const PLAY_BUTTON_SELECTORS = [
   '[class*="playBtn"]',
 ];
 
-// ปุ่มยอมรับ cookie/popup ที่มักบังหน้าจอก่อนแคปภาพ
 const COOKIE_CONSENT_SELECTORS = [
   'button[aria-label*="Accept"]',
   'button[aria-label*="ยอมรับ"]',
@@ -27,6 +35,32 @@ const COOKIE_CONSENT_SELECTORS = [
   'text=ยอมรับ',
   'text=Got it',
 ];
+
+const LOGIN_WALL_PATTERNS = [
+  /sign in to confirm/i,
+  /ลงชื่อเข้าใช้เพื่อยืนยัน/,
+  /please (create or )?login/i,
+  /กรุณาเข้าสู่ระบบ/,
+  /create or login/i,
+];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(false), ms)),
+  ]);
+}
+
+function withTimeoutOrThrow(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
+// ─── Excel ───────────────────────────────────────────────────────────────────
 
 function readAdsFromExcel(filePath) {
   const wb = xlsx.readFile(filePath);
@@ -55,27 +89,8 @@ function readAdsFromExcel(filePath) {
   return ads;
 }
 
-// เช็คว่ามีวิดีโอกำลังเล่นอยู่ในหน้าไหม (รวมถึงใน iframe)
-// ใส่ timeout กันเฟรมที่ค้าง/ตอบสนองช้าทำให้ loop ทั้งหมดหยุด
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => resolve(false), ms)),
-  ]);
-}
+// ─── Session / Login ─────────────────────────────────────────────────────────
 
-// คล้าย withTimeout แต่ throw error ออกมาแทนที่จะคืนค่า false (ใช้กับขั้นตอนที่ห้ามค้าง)
-function withTimeoutOrThrow(promise, ms, message) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
-  ]);
-}
-
-const LAUNCH_TIMEOUT_MS = 30000;
-
-// โหลด session ที่ login ไว้แล้ว (ถ้ามี) จาก env var BROWSER_STORAGE_STATE_B64
-// สร้างได้ด้วย `node login-session.js` แล้วแปลงไฟล์ storageState.json เป็น base64
 function loadStorageState() {
   const b64 = process.env.BROWSER_STORAGE_STATE_B64;
   if (!b64) return null;
@@ -91,14 +106,67 @@ function loadStorageState() {
   }
 }
 
-// ข้อความที่มักขึ้นเมื่อหน้าเว็บต้อง login ก่อนถึงจะดูโฆษณาได้
-const LOGIN_WALL_PATTERNS = [
-  /sign in to confirm/i,
-  /ลงชื่อเข้าใช้เพื่อยืนยัน/,
-  /please (create or )?login/i,
-  /กรุณาเข้าสู่ระบบ/,
-  /create or login/i,
-];
+// ─── Bot-detection evasion init script ───────────────────────────────────────
+
+const ANTI_BOT_SCRIPT = () => {
+  // 1. ซ่อน webdriver flag
+  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+
+  // 2. จำลอง window.chrome ให้ครบ
+  if (!window.chrome) {
+    window.chrome = {
+      app: { isInstalled: false, InstallState: {}, RunningState: {} },
+      runtime: {
+        PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' },
+        PlatformArch: { ARM: 'arm', X86_32: 'x86-32', X86_64: 'x86-64' },
+        RequestUpdateCheckStatus: { THROTTLED: 'throttled', NO_UPDATE: 'no_update', UPDATE_AVAILABLE: 'update_available' },
+        OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update', SHARED_MODULE_UPDATE: 'shared_module_update' },
+        OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
+      },
+    };
+  }
+
+  // 3. จำลอง plugins ให้ไม่ว่างเปล่า (headless มักมี plugins = 0)
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => {
+      const makePlugin = (name, filename, desc, mimeType) => {
+        const plugin = Object.create(Plugin.prototype);
+        Object.defineProperty(plugin, 'name', { get: () => name });
+        Object.defineProperty(plugin, 'filename', { get: () => filename });
+        Object.defineProperty(plugin, 'description', { get: () => desc });
+        Object.defineProperty(plugin, 'length', { get: () => 1 });
+        const mime = Object.create(MimeType.prototype);
+        Object.defineProperty(mime, 'type', { get: () => mimeType });
+        plugin[0] = mime;
+        return plugin;
+      };
+      const arr = [
+        makePlugin('Chrome PDF Plugin', 'internal-pdf-viewer', 'Portable Document Format', 'application/x-google-chrome-pdf'),
+        makePlugin('Chrome PDF Viewer', 'mhjfbmdgcfjbbpaeojofohoefgiehjai', '', 'application/pdf'),
+        makePlugin('Native Client', 'internal-nacl-plugin', '', 'application/x-nacl'),
+      ];
+      Object.defineProperty(arr, 'namedItem', { value: (n) => arr.find(p => p.name === n) || null });
+      Object.defineProperty(arr, 'refresh', { value: () => {} });
+      return arr;
+    },
+  });
+
+  // 4. languages ไม่ว่าง
+  Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US', 'en'] });
+
+  // 5. ซ่อน automation ใน permissions API
+  const origQuery = window.navigator.permissions && window.navigator.permissions.query.bind(navigator.permissions);
+  if (origQuery) {
+    navigator.permissions.query = (params) => {
+      if (params.name === 'notifications') {
+        return Promise.resolve({ state: Notification.permission, onchange: null });
+      }
+      return origQuery(params);
+    };
+  }
+};
+
+// ─── Page helpers ─────────────────────────────────────────────────────────────
 
 async function detectLoginWall(page) {
   try {
@@ -130,12 +198,7 @@ async function isVideoPlaying(page) {
   return false;
 }
 
-const MAX_WAIT_FOR_VIDEO_MS = 15000;
-const FALLBACK_WAIT_MS = 6000;
-const POLL_INTERVAL_MS = 1000;
-const EXTRA_WAIT_AFTER_PLAY_MS = 2000;
-
-const PER_AD_TIMEOUT_MS = 60000;
+// ─── Capture one ad ───────────────────────────────────────────────────────────
 
 async function captureOne(browser, ad, index, shotsDir, controller, onTick, storageStatePath) {
   const tick = (step) => { if (onTick) onTick(step); };
@@ -145,11 +208,12 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
 
   let context;
   let page;
+  let loginWall = false;
 
   const run = async () => {
     tick('กำลังเปิดเบราว์เซอร์...');
     context = await browser.newContext({
-      viewport: { width: 1024, height: 576 },
+      viewport: { width: 1280, height: 720 },
       ignoreHTTPSErrors: true,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       locale: 'th-TH',
@@ -157,65 +221,7 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
       storageState: storageStatePath || undefined,
     });
     page = await context.newPage();
-
-    // ซ่อน signal ที่ YouTube/เว็บอื่นใช้ตรวจจับ headless/automation browser
-    await page.addInitScript(() => {
-      // 1. ซ่อน webdriver flag
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-
-      // 2. จำลอง chrome object ให้เหมือน browser จริง
-      if (!window.chrome) {
-        window.chrome = {
-          app: { isInstalled: false, InstallState: {}, RunningState: {} },
-          runtime: {
-            PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' },
-            PlatformArch: { ARM: 'arm', X86_32: 'x86-32', X86_64: 'x86-64' },
-            RequestUpdateCheckStatus: { THROTTLED: 'throttled', NO_UPDATE: 'no_update', UPDATE_AVAILABLE: 'update_available' },
-            OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update', SHARED_MODULE_UPDATE: 'shared_module_update' },
-            OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
-          },
-        };
-      }
-
-      // 3. จำลอง plugins ให้ไม่ว่างเปล่า (headless มักมี plugins = 0)
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => {
-          const makePlugin = (name, filename, desc, mimeType) => {
-            const plugin = Object.create(Plugin.prototype);
-            Object.defineProperty(plugin, 'name', { get: () => name });
-            Object.defineProperty(plugin, 'filename', { get: () => filename });
-            Object.defineProperty(plugin, 'description', { get: () => desc });
-            Object.defineProperty(plugin, 'length', { get: () => 1 });
-            const mime = Object.create(MimeType.prototype);
-            Object.defineProperty(mime, 'type', { get: () => mimeType });
-            plugin[0] = mime;
-            return plugin;
-          };
-          const arr = [
-            makePlugin('Chrome PDF Plugin', 'internal-pdf-viewer', 'Portable Document Format', 'application/x-google-chrome-pdf'),
-            makePlugin('Chrome PDF Viewer', 'mhjfbmdgcfjbbpaeojofohoefgiehjai', '', 'application/pdf'),
-            makePlugin('Native Client', 'internal-nacl-plugin', '', 'application/x-nacl'),
-          ];
-          Object.defineProperty(arr, 'namedItem', { value: (n) => arr.find(p => p.name === n) || null });
-          Object.defineProperty(arr, 'refresh', { value: () => {} });
-          return arr;
-        },
-      });
-
-      // 4. languages ไม่ว่าง
-      Object.defineProperty(navigator, 'languages', { get: () => ['th-TH', 'th', 'en-US', 'en'] });
-
-      // 5. ซ่อน automation ใน permissions API
-      const origQuery = window.navigator.permissions && window.navigator.permissions.query.bind(navigator.permissions);
-      if (origQuery) {
-        navigator.permissions.query = (params) => {
-          if (params.name === 'notifications') {
-            return Promise.resolve({ state: Notification.permission, onchange: null });
-          }
-          return origQuery(params);
-        };
-      }
-    });
+    await page.addInitScript(ANTI_BOT_SCRIPT);
 
     if (controller) controller.currentPage = page;
 
@@ -240,7 +246,6 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
       }
     }
 
-    // รอจนวิดีโอเริ่มเล่น (สูงสุด MAX_WAIT_FOR_VIDEO_MS) ถ้าไม่เจอเลยใช้เวลารอ fallback
     let playing = false;
     let waited = 0;
     while (waited < MAX_WAIT_FOR_VIDEO_MS) {
@@ -259,12 +264,10 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
     }
 
     tick('กำลังแคปภาพหน้าจอ...');
-    await page.screenshot({ path: filePath, type: 'jpeg', quality: 70, timeout: 25000 });
+    await page.screenshot({ path: filePath, type: 'jpeg', quality: 80, timeout: 25000 });
 
     loginWall = await detectLoginWall(page);
   };
-
-  let loginWall = false;
 
   try {
     await Promise.race([
@@ -284,6 +287,8 @@ async function captureOne(browser, ad, index, shotsDir, controller, onTick, stor
     return { ...ad, screenshot: null, status: 'error', error: err.message };
   }
 }
+
+// ─── Run all captures ─────────────────────────────────────────────────────────
 
 async function runCapture(ads, shotsDir, onProgress, controller) {
   fs.mkdirSync(shotsDir, { recursive: true });
@@ -308,7 +313,7 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
       '--metrics-recording-only',
       '--mute-audio',
       '--js-flags=--max-old-space-size=192',
-      '--window-size=1024,576',
+      '--window-size=1280,720',
       '--disable-ipc-flooding-protection',
       '--password-store=basic',
       '--use-mock-keychain',
@@ -319,7 +324,6 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
   }
 
-  // session ที่ login ไว้แล้ว (เช่น YouTube/WeTV) เก็บเป็น base64 ของไฟล์ storageState.json
   const storageStatePath = loadStorageState();
 
   const results = [];
@@ -329,7 +333,6 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
     const ad = ads[i];
     if (onProgress) onProgress({ index: i, total: ads.length, name: ad.name, status: 'running' });
 
-    // เปิด/ปิด browser ใหม่ทุกรายการ เพื่อไม่ให้ memory สะสมจากรายการก่อนหน้า
     let result;
     try {
       const browser = await withTimeoutOrThrow(chromium.launch(launchOptions), LAUNCH_TIMEOUT_MS, 'เปิดเบราว์เซอร์ไม่สำเร็จ (timeout)');
@@ -351,24 +354,45 @@ async function runCapture(ads, shotsDir, onProgress, controller) {
   return results;
 }
 
+// ─── Build PPTX ───────────────────────────────────────────────────────────────
+//
+// Layout (13.33" × 7.5" WIDE):
+//
+//  Cover slide:
+//    - "Ads Capture Report" centered ~y=2.8
+//    - วันที่ + จำนวนรายการ ~y=4.2
+//
+//  Section divider slide (1 slide ต่อ 1 type/platform):
+//    - ชื่อ platform (เช่น "YouTube") ตัวใหญ่ 60pt กลางหน้า
+//
+//  Ad slide:
+//    y=0.00  ชื่อโฆษณา (20pt bold, full width)
+//    y=0.45  Type: xxx  (12pt, full width)
+//    y=0.72  Screenshot (13.33" × 6.0")    <── ตรงกับตัวอย่าง
+//    y=6.72  ⚠ warning (ถ้ามี, 9pt)
+//    y=6.97  URL (7pt, hyperlink)
+
 async function buildPptx(results, outFile) {
   const pptx = new pptxgen();
   pptx.defineLayout({ name: 'WIDE', width: 13.33, height: 7.5 });
   pptx.layout = 'WIDE';
 
+  // ── Cover ──
   const cover = pptx.addSlide();
   cover.addText('Ads Capture Report', {
-    x: 0.5, y: 2.8, w: 12, h: 1, fontSize: 36, bold: true, color: '1D9E75',
+    x: 0.5, y: 2.8, w: 12.33, h: 1,
+    fontSize: 36, bold: true, color: '1D9E75', align: 'center',
   });
-  cover.addText(`สร้างเมื่อ: ${new Date().toLocaleString('th-TH')}\nจำนวนรายการ: ${results.length}`, {
-    x: 0.5, y: 4, w: 12, h: 1, fontSize: 16, color: '666666',
-  });
+  cover.addText(
+    `สร้างเมื่อ: ${new Date().toLocaleString('th-TH')}\nจำนวนรายการ: ${results.length}`,
+    { x: 0.5, y: 4.2, w: 12.33, h: 1, fontSize: 16, color: '666666', align: 'center' },
+  );
 
-  // จัดกลุ่มโฆษณาตาม type และใส่ section slide นำหน้าแต่ละกลุ่ม
+  // ── จัดกลุ่มตาม type รักษาลำดับ ──
   const groups = [];
   const seenTypes = new Map();
   for (const r of results) {
-    const key = r.type || r.sheet || 'Other';
+    const key = (r.type || r.sheet || 'Other').trim();
     if (!seenTypes.has(key)) {
       seenTypes.set(key, groups.length);
       groups.push({ type: key, items: [] });
@@ -377,46 +401,56 @@ async function buildPptx(results, outFile) {
   }
 
   for (const group of groups) {
-    // Section divider slide
+    // ── Section divider ──
     const section = pptx.addSlide();
     section.addText(group.type, {
-      x: 0, y: 2.7, w: 13.33, h: 1.5,
-      fontSize: 60, bold: true, color: '222222', align: 'center', valign: 'middle',
+      x: 0, y: 2.5, w: 13.33, h: 2.5,
+      fontSize: 60, bold: true, color: '222222',
+      align: 'center', valign: 'middle',
     });
 
+    // ── Ad slides ──
     for (const r of group.items) {
       const slide = pptx.addSlide();
 
-      // ชื่อโฆษณา — full width, top
+      // ชื่อโฆษณา — full width, ชิดบน
       slide.addText(r.name, {
-        x: 0, y: 0, w: 13.33, h: 0.6, fontSize: 20, bold: true, color: '222222',
-        valign: 'middle',
+        x: 0, y: 0, w: 13.33, h: 0.6,
+        fontSize: 20, bold: true, color: '222222', valign: 'middle',
       });
 
       // Type bar
       slide.addText(`Type: ${r.type}`, {
-        x: 0, y: 0.45, w: 13.33, h: 0.27, fontSize: 12, color: '888888',
-        valign: 'middle',
+        x: 0, y: 0.45, w: 13.33, h: 0.27,
+        fontSize: 12, color: '888888', valign: 'middle',
       });
 
-      // Screenshot เต็มความกว้าง
+      // Screenshot — เต็มความกว้าง ตรงกับตัวอย่าง (y=0.72, h=6.0)
       if (r.status === 'ok' && r.screenshot && fs.existsSync(r.screenshot)) {
         slide.addImage({ path: r.screenshot, x: 0, y: 0.72, w: 13.33, h: 6.0 });
       } else {
-        slide.addText(`แคปไม่สำเร็จ: ${r.error || 'ไม่ทราบสาเหตุ'}`, {
-          x: 0, y: 2.5, w: 13.33, h: 1, fontSize: 14, color: 'CC0000', align: 'center',
+        slide.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0.72, w: 13.33, h: 6.0,
+          fill: { color: 'F5F5F5' }, line: { color: 'DDDDDD', width: 1 },
+        });
+        slide.addText(`แคปไม่สำเร็จ\n${r.error || 'ไม่ทราบสาเหตุ'}`, {
+          x: 0, y: 2.8, w: 13.33, h: 1.5,
+          fontSize: 14, color: 'CC0000', align: 'center', valign: 'middle',
         });
       }
 
+      // Warning (ถ้ามี)
       if (r.warning) {
         slide.addText(`⚠ ${r.warning}`, {
-          x: 0, y: 6.72, w: 13.33, h: 0.25, fontSize: 9, color: 'CC8800',
+          x: 0, y: 6.72, w: 13.33, h: 0.25,
+          fontSize: 9, color: 'CC8800',
         });
       }
 
-      // URL เล็กๆ ล่างสุด
+      // URL — ล่างสุด
       slide.addText(r.url, {
-        x: 0, y: 6.97, w: 13.33, h: 0.25, fontSize: 7, color: '4A90D9',
+        x: 0, y: 6.97, w: 13.33, h: 0.28,
+        fontSize: 7, color: '4A90D9',
         hyperlink: { url: r.url },
       });
     }
