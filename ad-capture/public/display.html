@@ -6,33 +6,37 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #0d1117;
-    color: #e6edf3;
+    background: #0d1117; color: #e6edf3;
     font-family: 'DM Sans', system-ui, sans-serif;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    flex-direction: column;
-    gap: 16px;
+    display: flex; align-items: center; justify-content: center;
+    height: 100vh; flex-direction: column; gap: 16px;
   }
   .icon { font-size: 64px; }
   h1 { font-size: 28px; font-weight: 700; color: #1D9E75; }
   p { font-size: 15px; color: #7d8590; text-align: center; line-height: 1.6; }
   .badge {
-    background: rgba(29,158,117,.12);
-    border: 1px solid rgba(29,158,117,.4);
-    border-radius: 8px;
-    padding: 8px 20px;
-    font-size: 13px;
-    color: #1D9E75;
+    background: rgba(29,158,117,.12); border: 1px solid rgba(29,158,117,.4);
+    border-radius: 8px; padding: 8px 20px; font-size: 13px; color: #1D9E75;
   }
+  .loading { font-size: 14px; color: #e3b341; }
 </style>
 </head>
 <body>
   <div class="icon">📺</div>
   <h1>Ads Capture Display</h1>
-  <p>หน้าต่างนี้ใช้สำหรับแสดงโฆษณา<br>ระบบจะเปลี่ยนหน้าไปยังลิงก์โฆษณาทีละอันโดยอัตโนมัติ</p>
-  <div class="badge">⬅ กรุณาเลือก Tab นี้เมื่อถูกถามให้แชร์หน้าจอ</div>
+  <p id="msg">หน้าต่างนี้ใช้สำหรับแสดงโฆษณา<br>ระบบจะเปลี่ยนหน้าไปยังลิงก์โฆษณาทีละอันโดยอัตโนมัติ</p>
+  <div class="badge" id="badge">⬅ กรุณาเลือก Tab นี้เมื่อถูกถามให้แชร์หน้าจอ</div>
+
+<script>
+  // ถ้ามี ?goto=URL ให้ redirect ทันที — ใช้เป็น relay ข้าม origin
+  const params = new URLSearchParams(location.search);
+  const goto = params.get('goto');
+  if (goto) {
+    document.getElementById('msg').textContent = 'กำลังเปิดลิงก์โฆษณา...';
+    document.getElementById('badge').className = 'loading';
+    document.getElementById('badge').textContent = '⏳ กำลังโหลด...';
+    setTimeout(() => { window.location.href = goto; }, 200);
+  }
+</script>
 </body>
 </html>

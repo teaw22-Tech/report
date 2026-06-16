@@ -407,12 +407,15 @@ async function startClientCapture() {
       document.getElementById('s3sub').textContent =
         `(${i + 1}/${ads.length}) เปิด: ${ad.name} (รอ ${waitSec}s)`;
 
-      // Navigate display tab
+      // Navigate ผ่าน relay /display.html?goto=URL (same-origin) → display.html redirect ไป ad URL
+      // วิธีนี้แก้ปัญหา Chrome block cross-origin navigation บน tab ที่ถูก capture
+      const relayUrl = '/display.html?goto=' + encodeURIComponent(ad.url);
       try {
-        displayWin.location.href = ad.url;
+        displayWin.location.href = relayUrl;
       } catch (_) {
-        displayWin = window.open(ad.url, 'AdsDisplay');
+        displayWin = window.open(relayUrl, 'AdsDisplay');
       }
+      await sleep(700); // รอ relay redirect เสร็จก่อน
 
       // Phase 1: รอโหลดหน้า
       for (let t = 0; t < loadWait; t += 500) {
